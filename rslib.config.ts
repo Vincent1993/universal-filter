@@ -1,14 +1,23 @@
-import { defineConfig } from '@rsbuild/core';
+import { defineConfig } from '@rslib/core';
 
 export default defineConfig({
-  source: {
-    entry: {
-      index: './src/index.ts',
+  lib: [{
+    format: 'esm',
+    source: {
+      tsconfigPath: './tsconfig.build.json',
+      entry: {
+        index: './src/index.ts',
+      },
     },
-  },
-  output: {
-    cleanDistPath: true,
-    minify: false,
-    format: ['esm', 'cjs'],
-  },
+   dts: true,
+   output: {
+    minify: true,
+    distPath: {
+      root: './dist',
+    },
+    filename: {
+      js: '[name].mjs',
+    },
+   }
+  }]
 });

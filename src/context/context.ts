@@ -1,4 +1,4 @@
-import React, { createContext } from 'react';
+import { createContext } from 'react';
 import type { FilterApi } from '../core/types';
 
 export const DEFAULT_NAMESPACE = '__default__';

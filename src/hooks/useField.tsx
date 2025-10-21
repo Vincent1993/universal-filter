@@ -1,74 +1,122 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useFieldContext } from '@formily/react';
-import { useFilter } from '../context/FilterProvider';
-import { readFieldSnapshot } from '../core/fieldHelpers';
+import { useMemo } from 'react';
+import { useField as formilyUseField } from '@formily/react';
+import type { Field } from '@formily/core';
+import { useFilter } from './useFilter';
 import type { FieldApi, FieldSnapshot, UseFieldOptions } from '../core/types';
 
 export function useField(path?: string, options?: UseFieldOptions): FieldApi {
   const filter = useFilter(options);
-  const form = filter.form as any;
+  const form = filter.form;
 
-  const fieldContext = useFieldContext();
-  const resolvedPath = path ?? fieldContext?.path?.toString();
-
-  if (!resolvedPath) {
-    throw new Error('useField requires a path prop or to be used within a FormItem component');
+  const formilyField = formilyUseField();
+  let resolvedPath = path;
+  if (!resolvedPath && formilyField) {
+    const addressStr = (formilyField as any).address?.entire;
+    if (!addressStr && typeof (formilyField as any).path === 'object' && (formilyField as any).path?.toString) {
+      resolvedPath = (formilyField as any).path.toString();
+    } else if (addressStr && typeof addressStr === 'string') {
+      resolvedPath = addressStr;
+    }
   }
 
-  const readSnapshot = () => readFieldSnapshot(form, resolvedPath);
-  const [snapshot, setSnapshot] = useState<FieldSnapshot>(readSnapshot);
+  if (!resolvedPath) {
+    throw new Error('useField requires a path prop or to be used within a Formily Field component');
+  }
 
-  useEffect(() => {
-    setSnapshot(readSnapshot());
-    const disposers = [
-      form.onFieldValueChange(resolvedPath, () => setSnapshot(readSnapshot())),
-      form.onFieldInitialValueChange?.(resolvedPath, () => setSnapshot(readSnapshot())),
-      form.onFieldInputValueChange?.(resolvedPath, () => setSnapshot(readSnapshot())),
-    ].filter(Boolean);
-    return () => {
-      disposers.forEach((dispose: () => void) => dispose?.());
-    };
-  }, [form, resolvedPath]);
+  const getFieldInstance = (): Field | undefined => {
+    const field = form.query(resolvedPath).take() as Field | undefined;
+    return field && 'value' in field ? field : undefined;
+  };
 
-  const api = useMemo<FieldApi>(() => {
-    return {
+  const normalizeErrors = (errors: unknown[]): string[] => {
+    return (errors || [])
+      .map((err) => {
+        if (!err) return '';
+        if (typeof err === 'string') return err;
+        if (Array.isArray(err)) return err.map((e) => String(e)).join(', ');
+        if (typeof err === 'object' && 'message' in err) return String((err as Record<string, unknown>).message);
+        return String(err);
+      })
+      .filter(Boolean);
+  };
+
+  const api = useMemo<FieldApi>(
+    () => ({
       name: resolvedPath,
       get value() {
-        return snapshot.value;
+        return getFieldInstance()?.value;
       },
       get error() {
-        return snapshot.errors[0];
+        const field = getFieldInstance();
+        const errors = normalizeErrors((field?.errors as unknown[]) ?? []);
+        return errors[0];
       },
       get validating() {
-        return snapshot.validating;
+        return getFieldInstance()?.validating ?? false;
       },
       get visible() {
-        return snapshot.displayed;
+        const field = getFieldInstance();
+        return field?.display !== 'hidden' && field?.display !== 'none';
       },
       get disabled() {
-        return snapshot.disabled;
+        const field = getFieldInstance();
+        return field?.disabled ?? false;
       },
       get touched() {
-        return snapshot.touched;
+        const field = getFieldInstance();
+        return (field as any)?.touched ?? false;
       },
-      setValue: (value: any) => {
-        form.setFieldValue(resolvedPath, value);
+      setValue(value, opts) {
+        const field = getFieldInstance();
+        if (field) {
+          field.value = value;
+          if (!opts?.silent) {
+            form.notify('fieldValueChanged', { path: resolvedPath, value });
+          }
+        }
       },
-      reset(mode = 'default') {
-        filter.resetValue(resolvedPath, mode);
+      reset(mode = 'initial') {
+        const field = getFieldInstance();
+        if (!field) return;
+
+        if (mode === 'initial') {
+          field.reset();
+        } else if (mode === 'default') {
+          field.value = field.initialValue;
+        } else if (mode === 'applied') {
+          const appliedField = form.query(resolvedPath).take() as Field | undefined;
+          if (appliedField && 'value' in appliedField) {
+            field.value = appliedField.value;
+          }
+        }
       },
       async validate() {
-        await form.validate(resolvedPath);
+        const field = getFieldInstance();
+        if (field) {
+          await field.validate();
+        }
       },
-      getState() {
-        return readFieldSnapshot(form, resolvedPath);
+      getState(): FieldSnapshot {
+        const field = getFieldInstance();
+        return {
+          value: field?.value,
+          initialValue: field?.initialValue,
+          displayed: field?.display !== 'hidden' && field?.display !== 'none',
+          disabled: field?.disabled ?? false,
+          validating: field?.validating ?? false,
+          errors: normalizeErrors((field?.errors as unknown[]) ?? []),
+          touched: (field as any)?.touched ?? false,
+        };
       },
       setState(cb) {
-        form.setFieldState(resolvedPath, cb);
-        setSnapshot(readFieldSnapshot(form, resolvedPath));
+        const field = form.query(resolvedPath).take();
+        if (field) {
+          cb(field as any);
+        }
       },
-    };
-  }, [filter, form, resolvedPath, snapshot]);
+    }),
+    [resolvedPath, form]
+  );
 
   return api;
 }

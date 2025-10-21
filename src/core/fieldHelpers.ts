@@ -1,4 +1,4 @@
-import type { Form, GeneralField } from '@formily/core';
+import type { Form } from '@formily/core';
 import type { FieldApi, FieldSnapshot } from './types';
 
 export function readFieldSnapshot(form: Form, path: string): FieldSnapshot {
@@ -12,7 +12,7 @@ export function readFieldSnapshot(form: Form, path: string): FieldSnapshot {
     touched: false,
   };
 
-  form.setFieldState(path, (field: GeneralField) => {
+  form.setFieldState(path, (field: any) => {
     snapshot = {
       value: field.value,
       initialValue: field.initialValue,
@@ -27,19 +27,19 @@ export function readFieldSnapshot(form: Form, path: string): FieldSnapshot {
   return snapshot;
 }
 
-function normalizeErrors(errors: any[]): string[] {
+function normalizeErrors(errors: unknown[]): string[] {
   return errors
     .map((err) => {
       if (!err) return '';
       if (typeof err === 'string') return err;
       if (Array.isArray(err)) return err.join(', ');
-      if (err.message) return String(err.message);
+      if (err && typeof err === 'object' && 'message' in err) return String((err as Record<string, unknown>).message);
       return String(err);
     })
     .filter(Boolean);
 }
 
-export function createFieldApi(form: Form, path: string, reset: (mode?: 'initial' | 'default' | 'applied') => void): FieldApi {
+export function createFieldApi(form: Form, path: string): FieldApi {
   return {
     name: path,
     get value() {
@@ -60,11 +60,20 @@ export function createFieldApi(form: Form, path: string, reset: (mode?: 'initial
     get touched() {
       return readFieldSnapshot(form, path).touched;
     },
-    setValue(value: any) {
-      form.setFieldValue(path, value);
+    setValue(value: unknown) {
+      (form as any).setFieldValue(path, value);
     },
-    reset(mode = 'default') {
-      reset(mode);
+    reset(mode = 'initial') {
+      const field = form.query(path).take() as any;
+      if (!field) return;
+
+      if (mode === 'initial') {
+        field.reset();
+      } else if (mode === 'default') {
+        field.value = field.initialValue;
+      } else if (mode === 'applied') {
+        field.value = field.initialValue;
+      }
     },
     async validate() {
       await form.validate(path);

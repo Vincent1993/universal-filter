@@ -2,10 +2,10 @@
 export * from './core/index';
 
 // React Hooks
-export { useField, useOptions } from './hooks/index';
+export { useField, useOptions, useFilter } from './hooks/index';
 
 // React Context & Providers
-export { FilterProvider, useFilter, FilterConfigure, useConfigure, getGlobalConfigure } from './context/index';
+export { FilterProvider, FilterConfigure, useConfigure, getGlobalConfigure } from './context/index';
 export type { FilterContextMap } from './context/index';
 
 // Adapters

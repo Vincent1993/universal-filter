@@ -2,15 +2,15 @@ import type { Form, GeneralField } from '@formily/core';
 import type { ISchema } from '@formily/json-schema';
 import type { ReactNode } from 'react';
 
-export type Draft = Record<string, any>;
-export type JsonRecord = Record<string, any>;
+export type Draft = Record<string, unknown>;
+export type JsonRecord = Record<string, unknown>;
 
 export type QueryKey = ReadonlyArray<unknown>;
 
 export interface OptionItem {
   label: string;
-  value: any;
-  [key: string]: any;
+  value: unknown;
+  [key: string]: unknown;
 }
 
 export interface OptionSource {
@@ -44,7 +44,7 @@ export interface FilterGroup {
 export interface RegisteredSchema<TDraft = Draft> {
   name: string;
   schema: ISchema;
-  meta?: Record<string, any>;
+  meta?: Record<string, unknown>;
 }
 
 export interface SchemaRegistrar<TDraft = Draft> {
@@ -59,7 +59,7 @@ export interface TransformContext<TDraft = Draft> {
   schema?: RegisteredSchema<TDraft>;
 }
 
-export interface DataShardOptions<TDraft = Draft, TSlice = any> {
+export interface DataShardOptions<TDraft = Draft, TSlice = unknown> {
   id: string;
   selector: (state: { draft: TDraft; applied?: TDraft }) => TSlice;
   projector?: (root: FilterApi<TDraft>, slice: TSlice) => void;
@@ -67,7 +67,7 @@ export interface DataShardOptions<TDraft = Draft, TSlice = any> {
   immediate?: boolean;
 }
 
-export interface DataShardHandle<TSlice = any> {
+export interface DataShardHandle<TSlice = unknown> {
   id: string;
   getSnapshot(): TSlice;
   setSnapshot(next: TSlice): void;
@@ -75,22 +75,22 @@ export interface DataShardHandle<TSlice = any> {
   dispose(): void;
 }
 
-export interface PipelineStage<TDraft = Draft, TPayload = any> {
+export interface PipelineStage<TDraft = Draft, TPayload = unknown> {
   name: string;
   encode?: (input: TPayload, ctx: TransformContext<TDraft>) => TPayload;
   decode?: (input: TPayload, ctx: TransformContext<TDraft>) => TPayload;
 }
 
 export interface DataPipeline<TDraft = Draft> {
-  encode(input: TDraft, ctx: TransformContext<TDraft>): any;
-  decode(input: any, ctx: TransformContext<TDraft>): TDraft;
+  encode(input: TDraft, ctx: TransformContext<TDraft>): unknown;
+  decode(input: unknown, ctx: TransformContext<TDraft>): TDraft;
   extend(stage: PipelineStage<TDraft>): DataPipeline<TDraft>;
 }
 
 export interface Plugin<TDraft = Draft> {
   name: string;
   onInit?(ctx: { root: FilterApi<TDraft> }): void | Promise<void>;
-  onAfterApply?(ctx: { root: FilterApi<TDraft>; payload: any; draft: TDraft }): void | Promise<void>;
+  onAfterApply?(ctx: { root: FilterApi<TDraft>; payload: unknown; draft: TDraft }): void | Promise<void>;
   onSchemaChange?(ctx: { root: FilterApi<TDraft>; prev?: RegisteredSchema<TDraft>; next: RegisteredSchema<TDraft> }):
     | void
     | Promise<void>;
@@ -101,9 +101,9 @@ export interface FilterListeners<TDraft = Draft> {
   onInit?(ctx: { root: FilterApi<TDraft> }): void;
   onSchemaLoaded?(ctx: { root: FilterApi<TDraft>; schema: RegisteredSchema<TDraft> }): void;
   onDraftChange?(draft: TDraft, prev: TDraft): void;
-  onFieldChange?(path: string, value: any, prev: any): void;
+  onFieldChange?(path: string, value: unknown, prev: unknown): void;
   onApplyStart?(ctx: { draft: TDraft }): void;
-  onApplySuccess?(ctx: { draft: TDraft; payload: any }): void;
+  onApplySuccess?(ctx: { draft: TDraft; payload: unknown }): void;
   onApplyError?(err: unknown): void;
   onReset?(ctx: { scope: 'all' | 'field' | 'group'; target?: string }): void;
   onDestroy?(ctx: { root: FilterApi<TDraft> }): void;
@@ -116,7 +116,7 @@ export interface FilterOptions<TDraft = Draft> {
   sections?: SectionConfig[];
   listeners?: FilterListeners<TDraft>;
   plugins?: Plugin<TDraft>[];
-  transform?: (input: TDraft, ctx: TransformContext<TDraft>) => any;
+  transform?: (input: TDraft, ctx: TransformContext<TDraft>) => unknown;
   pipeline?: DataPipeline<TDraft>;
   strict?: boolean;
   applyDebounceMs?: number;
@@ -124,8 +124,8 @@ export interface FilterOptions<TDraft = Draft> {
 }
 
 export interface FieldSnapshot {
-  value: any;
-  initialValue: any;
+  value: unknown;
+  initialValue: unknown;
   displayed: boolean;
   disabled: boolean;
   validating: boolean;
@@ -133,15 +133,16 @@ export interface FieldSnapshot {
   touched: boolean;
 }
 
+// FieldApi - provides a unified interface for field operations
 export interface FieldApi {
   name: string;
-  value: any;
+  value: unknown;
   error?: string;
   validating: boolean;
   visible: boolean;
   disabled: boolean;
   touched: boolean;
-  setValue(value: any, opts?: { silent?: boolean }): void;
+  setValue(value: unknown, opts?: { silent?: boolean }): void;
   reset(mode?: 'initial' | 'default' | 'applied'): void;
   validate(): Promise<void>;
   getState(): FieldSnapshot;
@@ -168,7 +169,8 @@ export interface LoadOptions<TDraft = Draft> {
   decode?: boolean;
 }
 
-export interface FilterApi<TDraft = Draft> {
+// FilterApi - provides a unified interface for filter operations
+export interface FilterApi<TDraft = Draft> extends Partial<Pick<Form, 'id' | 'values'>> {
   readonly id: string;
   readonly form: Form;
   readonly schema?: RegisteredSchema<TDraft>;
@@ -191,7 +193,7 @@ export interface FilterApi<TDraft = Draft> {
   load(values: Partial<TDraft>, options?: LoadOptions<TDraft>): void;
   getPipeline(): DataPipeline<TDraft> | undefined;
   getGroups(): FilterGroup[];
-  registerDataShard<TSlice = any>(options: DataShardOptions<TDraft, TSlice>): DataShardHandle<TSlice>;
+  registerDataShard<TSlice = unknown>(options: DataShardOptions<TDraft, TSlice>): DataShardHandle<TSlice>;
   getPluginState<TState = unknown>(key: string | symbol): TState | undefined;
   setPluginState<TState = unknown>(key: string | symbol, value: TState | undefined): void;
 }
@@ -199,7 +201,7 @@ export interface FilterApi<TDraft = Draft> {
 export interface GlobalDefaults<TDraft = Draft> {
   plugins?: Plugin<TDraft>[];
   listeners?: FilterListeners<TDraft>;
-  transform?: (input: TDraft, ctx: TransformContext<TDraft>) => any;
+  transform?: (input: TDraft, ctx: TransformContext<TDraft>) => unknown;
   pipeline?: DataPipeline<TDraft>;
   strict?: boolean;
   applyDebounceMs?: number;

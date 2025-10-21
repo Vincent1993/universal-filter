@@ -9,7 +9,7 @@ export interface UrlSyncAdapter {
 
 export interface UrlSyncPluginOptions<TDraft extends Draft> {
   adapter: UrlSyncAdapter;
-  serialize?: (ctx: { draft: TDraft; payload: any }) => Record<string, string | string[] | null | undefined>;
+  serialize?: (ctx: { draft: TDraft; payload: unknown }) => Record<string, string | string[] | null | undefined>;
   deserialize?: (params: Record<string, string | string[]>) => Partial<TDraft>;
   decode?: boolean;
   mode?: 'replace' | 'merge';
@@ -45,7 +45,7 @@ export function createUrlSyncPlugin<TDraft extends Draft = Draft>(
         });
       }
     },
-    onAfterApply({ draft, payload, root }) {
+    onAfterApply({ draft, payload }) {
       const params = serialize({ draft, payload });
       const next = stringifyParams(params);
       suppress = true;
@@ -86,7 +86,7 @@ function stringifyParams(params: Record<string, string | string[] | null | undef
   return searchParams.toString();
 }
 
-function defaultSerialize<TDraft extends Draft>(ctx: { draft: TDraft; payload: any }) {
+function defaultSerialize<TDraft extends Draft>(ctx: { draft: TDraft; payload: unknown }) {
   const source = ctx.payload ?? ctx.draft;
   const params: Record<string, string | string[] | null | undefined> = {};
   for (const [key, value] of Object.entries(source ?? {})) {
@@ -107,7 +107,7 @@ function defaultSerialize<TDraft extends Draft>(ctx: { draft: TDraft; payload: a
 function defaultDeserialize<TDraft extends Draft>(
   params: Record<string, string | string[]>
 ): Partial<TDraft> {
-  const draft: Record<string, any> = {};
+  const draft: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(params)) {
     if (Array.isArray(value)) {
       draft[key] = value.map((item) => coerceValue(item));
@@ -118,7 +118,7 @@ function defaultDeserialize<TDraft extends Draft>(
   return draft as Partial<TDraft>;
 }
 
-function coerceValue(value: string) {
+function coerceValue(value: string): unknown {
   if (value === 'true') return true;
   if (value === 'false') return false;
   if (value === 'null') return null;

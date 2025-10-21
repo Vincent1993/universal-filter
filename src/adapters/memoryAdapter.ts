@@ -1,20 +1,20 @@
 import { cloneDeep } from 'es-toolkit';
-import type { FilterApi } from '../core/types';
+import type { Draft, FilterApi } from '../core/types';
 
 export interface MemoryAdapterSnapshot<TDraft> {
   draft: TDraft;
-  applied: any;
+  applied: unknown;
 }
 
-export interface MemoryAdapterApi<TDraft> {
+export interface MemoryAdapterApi<TDraft extends Draft> {
   readonly filter: FilterApi<TDraft>;
   getSnapshot(): MemoryAdapterSnapshot<TDraft>;
-  setValue(path: string, value: any): void;
+  setValue(path: string, value: unknown): void;
   subscribe(listener: (snapshot: MemoryAdapterSnapshot<TDraft>) => void): () => void;
   dispose(): void;
 }
 
-export function createMemoryAdapter<TDraft>(filter: FilterApi<TDraft>): MemoryAdapterApi<TDraft> {
+export function createMemoryAdapter<TDraft extends Draft>(filter: FilterApi<TDraft>): MemoryAdapterApi<TDraft> {
   let snapshot: MemoryAdapterSnapshot<TDraft> = {
     draft: cloneDeep(filter.draft),
     applied: cloneDeep(filter.applied),

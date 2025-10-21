@@ -65,11 +65,11 @@ class StateManager<TDraft> {
     return this.internalState.appliedDraft ?? this.draft;
   }
 
-  getAppliedPayload(): any {
+  getAppliedPayload(): unknown {
     return this.internalState.appliedPayload;
   }
 
-  setApplied(draft: TDraft, payload: any): void {
+  setApplied(draft: TDraft, payload: unknown): void {
     this.internalState.appliedDraft = cloneDeep(draft);
     this.internalState.appliedPayload = payload;
     this.applied = cloneDeep(draft);
@@ -81,23 +81,6 @@ class StateManager<TDraft> {
 
   setRegistrar(registrar: SchemaRegistrar<TDraft>): void {
     this.internalState.registrar = registrar;
-  }
-}
-
-class SubscriptionManager<TDraft> {
-  private subscribers = new Set<(state: { draft: TDraft; applied?: TDraft }) => void>();
-
-  subscribe(listener: (state: { draft: TDraft; applied?: TDraft }) => void): () => void {
-    this.subscribers.add(listener);
-    return () => this.subscribers.delete(listener);
-  }
-
-  broadcast(state: { draft: TDraft; applied?: TDraft }): void {
-    this.subscribers.forEach((listener) => listener(cloneDeep(state)));
-  }
-
-  getCount(): number {
-    return this.subscribers.size;
   }
 }
 
@@ -135,17 +118,16 @@ export class FilterController<TDraft extends Draft> implements FilterApi<TDraft>
   readonly options = new OptionsRegistry();
 
   private readonly stateManager: StateManager<TDraft>;
-  private readonly subscriptionManager: SubscriptionManager<TDraft>;
   private readonly groupManager: GroupManager;
-  private readonly roots = new Map<string, HeadlessRecord<any>>();
-  private readonly shards = new Map<string, DataShardRecord<any>>();
+  private readonly roots = new Map<string, HeadlessRecord<unknown>>();
+  private readonly shards = new Map<string, DataShardRecord<unknown>>();
   private readonly pluginState = new Map<string | symbol, unknown>();
 
   private listeners: FilterListeners<TDraft> | undefined;
   private plugins: Plugin<TDraft>[] = [];
   private defaultValues: TDraft;
   private readonly strict: boolean;
-  private readonly transform?: (input: any, ctx: TransformContext<TDraft>) => any;
+  private readonly transform?: (input: TDraft, ctx: TransformContext<TDraft>) => unknown;
   private readonly pipeline?: DataPipeline<TDraft>;
   private readonly applyDebounce: number;
 
@@ -197,7 +179,6 @@ export class FilterController<TDraft extends Draft> implements FilterApi<TDraft>
     this.defaultValues = cloneDeep((optionsConfig.defaultValues ?? {}) as TDraft);
 
     this.stateManager = new StateManager(this.defaultValues);
-    this.subscriptionManager = new SubscriptionManager();
     this.groupManager = new GroupManager();
 
     this.id = `filter-${Math.random().toString(36).slice(2, 8)}`;
@@ -233,13 +214,13 @@ export class FilterController<TDraft extends Draft> implements FilterApi<TDraft>
     }
 
     const ctx: TransformContext<TDraft> = { root: this, schema: this.schema };
-    let payload: any = cloneDeep(snapshot);
+    let payload: unknown = cloneDeep(snapshot);
     try {
       if (this.pipeline) {
         payload = this.pipeline.encode(cloneDeep(snapshot), ctx);
       }
       if (this.transform) {
-        payload = this.transform(cloneDeep(payload), ctx);
+        payload = this.transform(cloneDeep(payload as TDraft), ctx);
       }
     } catch (error) {
       this.listeners?.onApplyError?.(error);
@@ -247,7 +228,7 @@ export class FilterController<TDraft extends Draft> implements FilterApi<TDraft>
     }
 
     this.stateManager.setApplied(snapshot, payload);
-    this.broadcast();
+    this.notifyStateChange();
     this.listeners?.onApplySuccess?.({ draft: snapshot, payload });
     void this.runPluginsAfterApply({ draft: snapshot, payload });
   }
@@ -257,7 +238,7 @@ export class FilterController<TDraft extends Draft> implements FilterApi<TDraft>
       this.form.setValues(cloneDeep(this.defaultValues));
       this.draft = cloneDeep(this.defaultValues);
       this.listeners?.onReset?.({ scope: 'all' });
-      this.broadcast();
+      this.notifyStateChange();
       return;
     }
 
@@ -269,7 +250,7 @@ export class FilterController<TDraft extends Draft> implements FilterApi<TDraft>
     }
 
     const next = this.form.getValuesIn(scope);
-    this.form.setFieldValue(scope, cloneDeep(next ?? this.readAtPath(this.defaultValues, scope)));
+    (this.form as any).setFieldValue(scope, cloneDeep(next ?? this.readAtPath(this.defaultValues, scope as string)));
     this.listeners?.onReset?.({ scope: 'field', target: scope });
     this.updateDraftFromForm();
   }
@@ -286,7 +267,7 @@ export class FilterController<TDraft extends Draft> implements FilterApi<TDraft>
       return;
     }
 
-    const resolvedMode = resolveMode(target as any, mode);
+    const resolvedMode = resolveMode(target as unknown as string | undefined, mode);
     const source = this.getSourceByMode(resolvedMode);
 
     if (scope === 'all') {
@@ -296,42 +277,30 @@ export class FilterController<TDraft extends Draft> implements FilterApi<TDraft>
     }
 
     const value = this.readAtPath(source, scope);
-    this.form.setFieldValue(scope, cloneDeep(value));
+    (this.form as any).setFieldValue(scope, cloneDeep(value));
     this.updateDraftFromForm();
   }
 
   clearErrors(scope: 'all' | 'group' | string = 'all', target?: string): void {
     if (scope === 'all') {
-      this.form.setFormState((state) => {
-        state.validating = false;
-        state.clearing = true;
-        state.errors = [];
-      });
+      this.form.clearErrors();
       return;
     }
 
     if (scope === 'group') {
       const id = ensureGroupId(target);
-      for (const fieldPath of this.groupManager.getGroupFields(id)) {
-        this.form.setFieldState(fieldPath, (field) => {
-          field.errors = [];
-        });
+      const fields = this.groupManager.getGroupFields(id);
+      for (const fieldPath of fields) {
+        this.form.clearErrors(fieldPath);
       }
       return;
     }
 
-    this.form.setFieldState(scope, (field) => {
-      field.errors = [];
-    });
+    this.form.clearErrors(scope);
   }
 
-  async validateAll(): Promise<void> {
-    this.validating = true;
-    try {
-      await this.form.validate();
-    } finally {
-      this.validating = false;
-    }
+  validateAll(): Promise<void> {
+    return this.form.validate();
   }
 
   registerOptionSource(path: string, source: OptionSource): void {
@@ -347,28 +316,40 @@ export class FilterController<TDraft extends Draft> implements FilterApi<TDraft>
   }
 
   getField(path: string): FieldApi {
-    return createFieldApi(this.form as any, path, (mode) => this.resetValue(path, mode));
+    return createFieldApi(this.form, path);
   }
 
   subscribe(listener: (state: { draft: TDraft; applied?: TDraft }) => void): () => void {
-    this.subscriptionManager.subscribe(listener);
-    listener({ draft: this.draft, applied: this.applied });
-    return () => this.subscriptionManager.subscribe(() => {});
+    const subscriptionId = (this.form as any).subscribe('filterStateChange', (payload: unknown) => {
+      if (payload && typeof payload === 'object' && 'draft' in payload) {
+        listener(payload as { draft: TDraft; applied?: TDraft });
+      }
+    });
+    return () => {
+      if (typeof subscriptionId === 'number') {
+        (this.form as any).unsubscribe(subscriptionId);
+      }
+    };
   }
 
   setSchemaRegistrar(registrar: SchemaRegistrar<TDraft>, mode: 'preserve' | 'reset' = 'reset'): void {
     this.installSchema(registrar, mode);
   }
 
-  createHeadlessRoot<TRoot = TDraft>(options: HeadlessRootOptions<TDraft, TRoot> = {}): HeadlessRoot<TRoot> {
-    const selector = options.selector ?? ((draft: TDraft) => draft as unknown as TRoot);
-    const apply = options.apply ?? ((root: FilterApi<TDraft>, next: TRoot) => {
-      root.load(next as unknown as TDraft, { mode: 'replace', decode: false });
-    });
-    const id = options.id ?? `${this.id}-root-${Math.random().toString(36).slice(2, 8)}`;
+  createHeadlessRoot<TRoot = TDraft>(options?: HeadlessRootOptions<TDraft, TRoot>): HeadlessRoot<TRoot> {
+    const {
+      id = `root-${Math.random().toString(36).slice(2, 8)}`,
+      selector = ((draft) => draft as unknown as TRoot) as (draft: TDraft) => TRoot,
+      apply,
+      immediate = true,
+    } = options ?? {};
 
-    let snapshot = cloneDeep(selector(this.draft));
+    if (this.roots.has(id)) {
+      throw new FilterError(ERROR_CODES.DUPLICATED_OBJECT, `HeadlessRoot with id "${id}" already exists`);
+    }
+
     const listeners = new Set<(value: TRoot) => void>();
+    let snapshot = cloneDeep(selector(this.draft));
 
     const notify = (value: TRoot) => {
       for (const listener of listeners) {
@@ -376,8 +357,8 @@ export class FilterController<TDraft extends Draft> implements FilterApi<TDraft>
       }
     };
 
-    const unsubscribe = this.subscribe(({ draft }) => {
-      const next = cloneDeep(selector(draft));
+    const unsubscribe = this.subscribe((state) => {
+      const next = cloneDeep(selector(state.draft));
       if (!isEqual(next, snapshot)) {
         snapshot = cloneDeep(next);
         notify(snapshot);
@@ -389,18 +370,18 @@ export class FilterController<TDraft extends Draft> implements FilterApi<TDraft>
       listeners,
       unsubscribe,
     };
-    this.roots.set(id, record);
+    this.roots.set(id, record as any);
 
     const root: HeadlessRoot<TRoot> = {
       id,
       getSnapshot: () => cloneDeep(snapshot),
       setSnapshot: (next) => {
         snapshot = cloneDeep(next);
-        apply(this, cloneDeep(next));
+        apply?.(this, cloneDeep(next));
       },
       subscribe: (listener) => {
         listeners.add(listener);
-        if (options.immediate ?? true) {
+        if (immediate) {
           listener(cloneDeep(snapshot));
         }
         return () => {
@@ -408,11 +389,18 @@ export class FilterController<TDraft extends Draft> implements FilterApi<TDraft>
         };
       },
       dispose: () => {
-        record.unsubscribe();
-        listeners.clear();
-        this.roots.delete(id);
+        const existing = this.roots.get(id);
+        if (existing) {
+          existing.unsubscribe();
+          (existing as any).listeners.clear();
+          this.roots.delete(id);
+        }
       },
     };
+
+    if (immediate) {
+      notify(snapshot);
+    }
 
     return root;
   }
@@ -432,7 +420,7 @@ export class FilterController<TDraft extends Draft> implements FilterApi<TDraft>
     }
 
     if (mode === 'merge') {
-      const merged = merge(cloneDeep(this.form.values as TDraft), incoming as Record<string, any>);
+      const merged = merge(cloneDeep(this.form.values as TDraft), incoming as Record<string, unknown>);
       this.form.setValues(cloneDeep(merged));
     } else {
       this.form.setValues(cloneDeep(incoming));
@@ -448,7 +436,7 @@ export class FilterController<TDraft extends Draft> implements FilterApi<TDraft>
     return this.groupManager.getGroups();
   }
 
-  registerDataShard<TSlice = any>(options: DataShardOptions<TDraft, TSlice>): DataShardHandle<TSlice> {
+  registerDataShard<TSlice = unknown>(options: DataShardOptions<TDraft, TSlice>): DataShardHandle<TSlice> {
     const { id, selector, projector = defaultShardProjector, immediate = true } = options;
     if (!id) {
       throw new FilterError(ERROR_CODES.SHARD_NOT_FOUND, 'Data shard id is required');
@@ -475,12 +463,12 @@ export class FilterController<TDraft extends Draft> implements FilterApi<TDraft>
 
     const record: DataShardRecord<TSlice> = {
       snapshot,
-      selector: selector as any,
-      projector: projector as any,
+      selector: selector as (state: { draft: unknown; applied?: unknown }) => TSlice,
+      projector: projector as (root: FilterApi<unknown>, slice: TSlice) => void,
       listeners,
       unsubscribe,
     };
-    this.shards.set(id, record);
+    this.shards.set(id, record as any);
 
     const handle: DataShardHandle<TSlice> = {
       id,
@@ -523,22 +511,22 @@ export class FilterController<TDraft extends Draft> implements FilterApi<TDraft>
   }
 
   private setupFormEffects() {
-    this.form.addEffects('filter-controller', (form) => {
+    this.form.addEffects('filter-controller', (form: any) => {
       form.onFormValuesChange(() => {
         const previous = this.draft;
         this.draft = cloneDeep(form.values as TDraft);
         this.listeners?.onDraftChange?.(this.draft, previous);
-        this.broadcast();
+        this.notifyStateChange();
       });
-      form.onFieldValueChange('*', (field) => {
+      form.onFieldValueChange('*', (field: any) => {
         const prev = field.modified ? field.modifiedValue : field.initialValue;
         this.listeners?.onFieldChange?.(field.path?.toString() ?? '', field.value, prev);
       });
     });
   }
 
-  private broadcast() {
-    this.subscriptionManager.broadcast({ draft: this.draft, applied: this.applied });
+  private notifyStateChange(): void {
+    this.form.notify('filterStateChange', { draft: this.draft, applied: this.applied });
   }
 
   private async runPluginsInit(): Promise<void> {
@@ -549,7 +537,7 @@ export class FilterController<TDraft extends Draft> implements FilterApi<TDraft>
     }
   }
 
-  private async runPluginsAfterApply(payload: { draft: TDraft; payload: any }): Promise<void> {
+  private async runPluginsAfterApply(payload: { draft: TDraft; payload: unknown }): Promise<void> {
     for (const plugin of this.plugins) {
       if (typeof plugin.onAfterApply === 'function') {
         await plugin.onAfterApply({ root: this, ...payload });
@@ -570,7 +558,7 @@ export class FilterController<TDraft extends Draft> implements FilterApi<TDraft>
 
   private updateDraftFromForm() {
     this.draft = cloneDeep(this.form.values as TDraft);
-    this.broadcast();
+    this.notifyStateChange();
   }
 
   private installSchema(registrar: SchemaRegistrar<TDraft>, mode: 'preserve' | 'reset') {
@@ -614,7 +602,7 @@ export class FilterController<TDraft extends Draft> implements FilterApi<TDraft>
     const source = this.getSourceByMode(mode);
     for (const fieldPath of fields) {
       const value = this.readAtPath(source, fieldPath);
-      this.form.setFieldValue(fieldPath, cloneDeep(value));
+      (this.form as any).setFieldValue(fieldPath, cloneDeep(value));
     }
     this.updateDraftFromForm();
   }
@@ -623,18 +611,21 @@ export class FilterController<TDraft extends Draft> implements FilterApi<TDraft>
     const existing = this.shards.get(id);
     if (existing) {
       existing.unsubscribe();
-      existing.listeners.clear();
+      (existing as any).listeners.clear();
       this.shards.delete(id);
     }
   }
 
-  private readAtPath(source: any, path: string): any {
+  private readAtPath(source: unknown, path: string): unknown {
     if (!path) return source;
-    return path.split('.').reduce((acc, key) => {
+    return path.split('.').reduce((acc: unknown, key) => {
       if (acc === undefined || acc === null) {
         return undefined;
       }
-      return acc[key as keyof typeof acc];
+      if (typeof acc === 'object') {
+        return (acc as Record<string, unknown>)[key];
+      }
+      return undefined;
     }, source);
   }
 }
@@ -682,6 +673,6 @@ function extractGroups<TDraft>(
   return convertSectionsToGroups(options.sections);
 }
 
-function defaultShardProjector(root: FilterApi<any>, slice: any) {
-  root.load(slice, { mode: 'merge', decode: false });
+function defaultShardProjector<TDraft extends Draft>(root: FilterApi<TDraft>, slice: unknown) {
+  root.load(slice as Partial<TDraft>, { mode: 'merge', decode: false });
 }
