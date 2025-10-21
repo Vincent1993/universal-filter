@@ -10,6 +10,8 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
+      "@hooks/*": ["src/hooks/*"],
+      "@contexts/*": ["src/contexts/*"],
       "@core/*": ["src/core/*"],
       "@adapters/*": ["src/adapters/*"],
       "@plugins/*": ["src/plugins/*"]

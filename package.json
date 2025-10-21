@@ -36,17 +36,22 @@
     "@formily/react": "^2.3.7",
     "@formily/shared": "^2.3.7",
     "@tanstack/query-core": "^5.49.0",
-    "es-toolkit": "^1.40.0"
+    "es-toolkit": "^1.40.0",
+    "ts-mixer": "^6.0.4"
   },
   "devDependencies": {
     "@rslib/core": "^0.15.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/react-hooks": "^8.0.1",
     "@types/react": "^18.2.0",
     "@typescript-eslint/eslint-plugin": "^8.46.2",
     "@typescript-eslint/parser": "^8.46.2",
     "@vitest/coverage-v8": "^3.2.4",
     "eslint": "^8.56.0",
     "eslint-config-prettier": "^10.1.8",
+    "jsdom": "^27.0.1",
     "react": "^18.2.0",
+    "react-dom": "^18.3.1",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   }
