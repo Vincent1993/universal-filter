@@ -1,5 +1,5 @@
 import { cloneDeep } from 'es-toolkit';
-import type { Draft, Plugin } from '../core/types.js';
+import type { Draft, Plugin } from '../core/types';
 
 export interface UrlSyncAdapter {
   read(): string;

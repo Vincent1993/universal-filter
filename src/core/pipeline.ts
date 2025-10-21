@@ -1,5 +1,5 @@
 import { cloneDeep } from 'es-toolkit';
-import type { DataPipeline, Draft, PipelineStage, TransformContext } from './types.js';
+import type { DataPipeline, Draft, PipelineStage, TransformContext } from './types';
 
 class Pipeline<TDraft> implements DataPipeline<TDraft> {
   constructor(private readonly stages: PipelineStage<TDraft>[]) {}

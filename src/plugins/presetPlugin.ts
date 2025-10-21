@@ -8,10 +8,10 @@ import type {
   PresetStorage,
   UseFilterPresetsOptions,
   UseFilterPresetsResult,
-} from '../core/types.js';
-import type { Plugin } from '../core/types.js';
-import { useFilter } from '../context/FilterProvider.js';
-import { ERROR_CODES, FilterError } from '../core/errors.js';
+} from '../core/types';
+import type { Plugin } from '../core/types';
+import { useFilter } from '../context/FilterProvider';
+import { ERROR_CODES, FilterError } from '../core/errors';
 
 const DEFAULT_PRESET_KEY = Symbol('preset-plugin');
 

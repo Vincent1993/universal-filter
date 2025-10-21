@@ -1,5 +1,5 @@
 import { cloneDeep, merge } from 'es-toolkit';
-import type { FilterListeners, Plugin } from './types.js';
+import type { FilterListeners, Plugin } from './types';
 
 export function mergePlugins<T>(
   base: Plugin<T>[],

@@ -1,5 +1,5 @@
 import type { Form, GeneralField } from '@formily/core';
-import type { FieldApi, FieldSnapshot } from './types.js';
+import type { FieldApi, FieldSnapshot } from './types';
 
 export function readFieldSnapshot(form: Form, path: string): FieldSnapshot {
   let snapshot: FieldSnapshot = {

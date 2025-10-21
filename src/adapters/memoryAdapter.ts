@@ -1,5 +1,5 @@
 import { cloneDeep } from 'es-toolkit';
-import type { FilterApi } from '../core/types.js';
+import type { FilterApi } from '../core/types';
 
 export interface MemoryAdapterSnapshot<TDraft> {
   draft: TDraft;

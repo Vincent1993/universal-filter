@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useMemo } from 'react';
-import { createInstanceRegistry } from '../core/registry.js';
-import type { FilterConfigureProps, FilterConfigureValue, GlobalDefaults } from '../core/types.js';
+import { createInstanceRegistry } from '../core/registry';
+import type { FilterConfigureProps, FilterConfigureValue, GlobalDefaults } from '../core/types';
 
 const DEFAULT_VALUE: Required<FilterConfigureValue<any>> = {
   defaults: {},

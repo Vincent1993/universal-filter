@@ -18,17 +18,17 @@ import type {
   RegisteredSchema,
   SchemaRegistrar,
   TransformContext,
-} from './types.js';
-import { OptionsRegistry } from './optionsRegistry.js';
-import { createFieldApi } from './fieldHelpers.js';
-import { ERROR_CODES, FilterError } from './errors.js';
-import { getGlobalConfigure } from '../context/configure.js';
-import { mergeListeners, mergePlugins } from './lifecycle.js';
-import { compileSchema } from './schema.js';
+} from './types';
+import { OptionsRegistry } from './optionsRegistry';
+import { createFieldApi } from './fieldHelpers';
+import { ERROR_CODES, FilterError } from './errors';
+import { getGlobalConfigure } from '../context/configure';
+import { mergeListeners, mergePlugins } from './lifecycle';
+import { compileSchema } from './schema';
 
 interface InternalState<TDraft> {
   appliedDraft?: TDraft;
-  appliedPayload?: any;
+  appliedPayload?: unknown;
   registrar?: SchemaRegistrar<TDraft>;
   schema?: RegisteredSchema<TDraft>;
 }
@@ -41,8 +41,8 @@ interface HeadlessRecord<TRoot> {
 
 interface DataShardRecord<TSlice> {
   snapshot: TSlice;
-  selector: (state: { draft: any; applied?: any }) => TSlice;
-  projector: (root: FilterApi<any>, slice: TSlice) => void;
+  selector: (state: { draft: unknown; applied?: unknown }) => TSlice;
+  projector: (root: FilterApi<unknown>, slice: TSlice) => void;
   listeners: Set<(value: TSlice) => void>;
   unsubscribe: () => void;
 }

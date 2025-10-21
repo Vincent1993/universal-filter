@@ -1,10 +1,10 @@
 import React, { useContext, useEffect, useMemo } from 'react';
 import { FormProvider } from '@formily/react';
 import { ExpressionScope } from '@formily/react';
-import { FilterContext, DEFAULT_NAMESPACE } from './context.js';
-import { ERROR_CODES, FilterError } from '../core/errors.js';
-import { useConfigure } from './configure.js';
-import type { FilterApi, FilterProviderProps, UseFilterInput } from '../core/types.js';
+import { FilterContext, DEFAULT_NAMESPACE } from './context';
+import { ERROR_CODES, FilterError } from '../core/errors';
+import { useConfigure } from './configure';
+import type { FilterApi, FilterProviderProps, UseFilterInput } from '../core/types';
 
 export function FilterProvider<TDraft>(props: FilterProviderProps<TDraft>): any {
   const { instance, namespace, children } = props;

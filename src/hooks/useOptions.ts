@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useFilter } from '../context/FilterProvider.js';
-import type { OptionsResult, UseOptionsInput } from '../core/types.js';
+import { useFilter } from '../context/FilterProvider';
+import type { OptionsResult, UseOptionsInput } from '../core/types';
 
 export function useOptions(input: UseOptionsInput): OptionsResult {
   const { path, keyword, ...rest } = input;

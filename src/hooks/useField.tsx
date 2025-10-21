@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useFieldContext } from '@formily/react';
-import { useFilter } from '../context/FilterProvider.js';
-import { readFieldSnapshot } from '../core/fieldHelpers.js';
-import type { FieldApi, FieldSnapshot, UseFieldOptions } from '../core/types.js';
+import { useFilter } from '../context/FilterProvider';
+import { readFieldSnapshot } from '../core/fieldHelpers';
+import type { FieldApi, FieldSnapshot, UseFieldOptions } from '../core/types';
 
 export function useField(path?: string, options?: UseFieldOptions): FieldApi {
   const filter = useFilter(options);

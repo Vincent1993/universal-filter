@@ -1,5 +1,5 @@
 import { cloneDeep } from 'es-toolkit';
-import type { Plugin } from '../core/types.js';
+import type { Plugin } from '../core/types';
 
 export interface HistoryPluginOptions<TDraft = Record<string, any>> {
   limit?: number;

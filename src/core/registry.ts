@@ -1,4 +1,4 @@
-import type { FilterApi, InstanceRegistry } from './types.js';
+import type { FilterApi, InstanceRegistry } from './types';
 
 class MemoryRegistry<TDraft> implements InstanceRegistry<TDraft> {
   #defaultInstance?: FilterApi<TDraft>;

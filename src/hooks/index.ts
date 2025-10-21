@@ -1,2 +1,2 @@
-export { useField } from './useField.js';
-export { useOptions } from './useOptions.js';
+export { useField } from './useField';
+export { useOptions } from './useOptions';

@@ -1,5 +1,5 @@
 import { cloneDeep } from 'es-toolkit';
-import type { Draft, OptionItem, OptionSource } from './types.js';
+import type { Draft, OptionItem, OptionSource } from './types';
 
 export class OptionsRegistry {
   private readonly map = new Map<string, OptionSource>();
