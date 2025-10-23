@@ -264,10 +264,7 @@ export interface GlobalDefaults<TDraft = Draft> {
   plugins?: Plugin<TDraft>[];
   listeners?: FilterListeners<TDraft>;
   transform?: (input: TDraft, ctx: TransformContext<TDraft>) => unknown;
-  pipeline?: DataPipeline<TDraft>;
-  strict?: boolean;
   applyDebounceMs?: number;
-  groups?: FilterGroup[];
 }
 
 export interface InstanceRegistry<TDraft = Draft> {
@@ -281,7 +278,6 @@ export interface InstanceRegistry<TDraft = Draft> {
 
 export interface FilterConfigureValue<TDraft = Draft> {
   defaults?: GlobalDefaults<TDraft>;
-  registry?: InstanceRegistry<TDraft>;
   mergeStrategy?: {
     plugins?: 'prepend' | 'append';
     listeners?: 'shallow' | 'deep';

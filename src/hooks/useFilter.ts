@@ -1,7 +1,6 @@
 import { useContext } from 'react';
-import { FilterContext, DEFAULT_NAMESPACE } from '../context/context';
 import { ERROR_CODES, FilterError } from '../core/errors';
-import { useConfigure } from '../context/configure';
+import { useConfigure, DEFAULT_NAMESPACE, FilterContext } from '../context';
 import type { FilterApi, UseFilterInput } from '../core/types';
 
 export function useFilter<TDraft>(input?: UseFilterInput<TDraft>): FilterApi<TDraft> {

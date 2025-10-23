@@ -1,15 +1,12 @@
 // Core API - Framework independent
-export * from './core/index';
+export * from './core';
 
 // React Hooks
-export { useField, useOptions, useFilter } from './hooks/index';
+export { useField, useOptions, useFilter } from './hooks';
 
 // React Context & Providers
-export { FilterProvider, FilterConfigure, useConfigure, getGlobalConfigure } from './context/index';
-export type { FilterContextMap } from './context/index';
-
-// Adapters
-export * from './adapters/memoryAdapter';
+export { FilterProvider, FilterConfigure, useConfigure, getGlobalConfigure } from './context';
+export type { FilterContextMap } from './context';
 
 // Plugins
 export * from './plugins/historyPlugin';

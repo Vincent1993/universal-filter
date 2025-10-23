@@ -2,7 +2,7 @@ import type { Draft, FilterApi, FilterOptions, Plugin } from './types';
 import EventEmitter from 'eventemitter3';
 import { CoreManager, PluginManager } from './managers';
 import { mergePlugins } from './lifecycle';
-import { getGlobalConfigure } from '../context/configure';
+import { getGlobalConfigure } from '../context';
 
 /**
  * FilterController 核心控制器

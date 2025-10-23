@@ -1,4 +1,10 @@
-export { FilterProvider } from './FilterProvider';
-export { FilterConfigure, useConfigure, getGlobalConfigure } from './configure';
-export { FilterContext, DEFAULT_NAMESPACE } from './context';
-export type { FilterContextMap } from './context';
+export {
+  FilterProvider,
+  FilterConfigure,
+  FilterContext,
+  useConfigure,
+  getGlobalConfigure,
+  DEFAULT_NAMESPACE,
+} from './Provider';
+
+export type { FilterContextMap } from './Provider';

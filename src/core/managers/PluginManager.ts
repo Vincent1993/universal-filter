@@ -76,6 +76,16 @@ export class PluginManager<TDraft extends Draft> {
     return Array.from(this.pluginReady.values()).every(({ ready }) => ready);
   }
 
+  /**
+   * @name count
+   * @description 插件数量
+   * @type {number}
+   * @readonly
+   */
+  get count(): number {
+    return this.plugins.length;
+  }
+
 
   /**
    * 根据依赖关系和优先级对插件进行拓扑排序

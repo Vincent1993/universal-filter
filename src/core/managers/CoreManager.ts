@@ -44,7 +44,7 @@ export interface ICoreManager<TDraft extends Draft> {
    * Formily 表单实例
    * @readonly
    */
-  readonly form: Form;
+  readonly form: Form<TDraft>;
 
   // ==================== 公共属性 ====================
 

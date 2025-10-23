@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import React from 'react';
 import { useFilter } from '../../../src/hooks/useFilter';
-import { FilterProvider } from '../../../src/context/FilterProvider';
+import { FilterProvider } from '../../../src/context/Provider';
 import { createFilter } from '../../../src/core/createFilter';
 import type { FilterApi } from '../../../src/core/types';
 
