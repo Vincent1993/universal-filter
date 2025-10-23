@@ -35,7 +35,8 @@ export function createMemoryAdapter<TDraft extends Draft>(filter: FilterApi<TDra
     filter,
     getSnapshot: () => snapshot,
     setValue(path, value) {
-      filter.getField(path).setValue(value);
+      // 使用 Formily Form 的 setValuesIn 方法
+      filter.form.setValuesIn(path, value);
     },
     subscribe(listener) {
       listeners.add(listener);

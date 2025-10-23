@@ -2,7 +2,7 @@ import { cloneDeep } from 'es-toolkit';
 import type { DataPipeline, Draft, PipelineStage, TransformContext } from './types';
 
 class Pipeline<TDraft> implements DataPipeline<TDraft> {
-  constructor(private readonly stages: PipelineStage<TDraft>[]) {}
+  constructor(private readonly stages: PipelineStage<TDraft>[] = []) {}
 
   encode(input: TDraft, ctx: TransformContext<TDraft>): any {
     let payload: any = cloneDeep(input) as any;
@@ -27,8 +27,13 @@ class Pipeline<TDraft> implements DataPipeline<TDraft> {
   extend(stage: PipelineStage<TDraft>): DataPipeline<TDraft> {
     return new Pipeline<TDraft>([...this.stages, stage]);
   }
+
+  // 添加 addStage 方法以支持链式调用
+  addStage(stage: PipelineStage<TDraft>): DataPipeline<TDraft> {
+    return this.extend(stage);
+  }
 }
 
-export function createDataPipeline<TDraft = Draft>(stages: PipelineStage<TDraft>[]): DataPipeline<TDraft> {
+export function createDataPipeline<TDraft = Draft>(stages: PipelineStage<TDraft>[] = []): DataPipeline<TDraft> {
   return new Pipeline(stages);
 }

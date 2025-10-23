@@ -1,6 +1,8 @@
-import type { Form, GeneralField } from '@formily/core';
+import type { Form, GeneralField, IFormProps } from '@formily/core';
 import type { ISchema } from '@formily/json-schema';
 import type { ReactNode } from 'react';
+import type { ICoreManager } from './managers';
+import type { PluginManager } from './managers/PluginManager';
 
 export type Draft = Record<string, unknown>;
 export type JsonRecord = Record<string, unknown>;
@@ -41,7 +43,7 @@ export interface FilterGroup {
   fields: string[];
 }
 
-export interface RegisteredSchema<TDraft = Draft> {
+export interface RegisteredSchema {
   name: string;
   schema: ISchema;
   meta?: Record<string, unknown>;
@@ -49,14 +51,14 @@ export interface RegisteredSchema<TDraft = Draft> {
 
 export interface SchemaRegistrar<TDraft = Draft> {
   name: string;
-  registerSchema(args: { external?: JsonRecord; sections?: SectionConfig[] }): RegisteredSchema<TDraft>;
-  afterRegister?(args: { root: FilterApi<TDraft>; schema: RegisteredSchema<TDraft> }): void;
-  registerOptions?(args: { root: FilterApi<TDraft>; schema: RegisteredSchema<TDraft> }): void;
+  registerSchema(args: { external?: JsonRecord; sections?: SectionConfig[] }): RegisteredSchema;
+  afterRegister?(args: { root: FilterApi<TDraft>; schema: RegisteredSchema }): void;
+  registerOptions?(args: { root: FilterApi<TDraft>; schema: RegisteredSchema }): void;
 }
 
 export interface TransformContext<TDraft = Draft> {
   root: FilterApi<TDraft>;
-  schema?: RegisteredSchema<TDraft>;
+  schema?: RegisteredSchema;
 }
 
 export interface DataShardOptions<TDraft = Draft, TSlice = unknown> {
@@ -85,31 +87,105 @@ export interface DataPipeline<TDraft = Draft> {
   encode(input: TDraft, ctx: TransformContext<TDraft>): unknown;
   decode(input: unknown, ctx: TransformContext<TDraft>): TDraft;
   extend(stage: PipelineStage<TDraft>): DataPipeline<TDraft>;
+  addStage(stage: PipelineStage<TDraft>): DataPipeline<TDraft>;
+}
+
+// 事件总线类型
+export interface FilterEventMap<TDraft = Draft> {
+  'draft:change': { draft: TDraft; prev?: TDraft };
+  'apply:start': { draft: TDraft };
+  'apply:success': { draft: TDraft; payload: unknown };
+  'validate:failed': { draft: TDraft; errors: Form['errors'] };
+  'reset': { scope: 'all' | 'group' | string; target?: string };
+  'schema:loaded': { schema: RegisteredSchema };
+  'schema:change': { prev?: RegisteredSchema; next: RegisteredSchema };
+  'plugin:ready': { name: string; ready: boolean; error?: unknown };
+  'plugins:ready': { ready: boolean };
+  'plugins:attached': { total: number };
+  'destroy': {};
+}
+
+export interface FilterEvents<TDraft = Draft> {
+  on<K extends keyof FilterEventMap<TDraft>>(
+    event: K,
+    listener: (payload: FilterEventMap<TDraft>[K]) => void
+  ): () => void;
+  once<K extends keyof FilterEventMap<TDraft>>(
+    event: K,
+    listener: (payload: FilterEventMap<TDraft>[K]) => void
+  ): () => void;
+  off<K extends keyof FilterEventMap<TDraft>>(
+    event: K,
+    listener: (payload: FilterEventMap<TDraft>[K]) => void
+  ): void;
+}
+
+// 内部总线（模块用）可有 emit，但不对外暴露
+export interface InternalFilterBus<TDraft = Draft> extends FilterEvents<TDraft> {
+  emit<K extends keyof FilterEventMap<TDraft>>(event: K, payload: FilterEventMap<TDraft>[K]): void;
+}
+
+// 模块契约（后续模块化装配使用）
+export interface ModuleContext<TDraft = Draft> {
+  root: FilterApi<TDraft>;
+  bus: InternalFilterBus<TDraft>;
+  setReady(ready: boolean, err?: unknown): void;
+  isReady(): boolean;
+}
+
+export interface Module<TDraft = Draft, TOptions = unknown> {
+  readonly name: string;
+  readonly namespace: string;
+  readonly requires?: string[];
+  init(ctx: ModuleContext<TDraft>, options?: TOptions): void | Promise<void>;
+  getPublicApi(): unknown;
+  dispose?(): void | Promise<void>;
+}
+
+export interface PluginInitContext<TDraft = Draft> {
+  root: FilterApi<TDraft>;
+  setReady(ready: boolean, error?: unknown): void;
+  isReady(): boolean;
 }
 
 export interface Plugin<TDraft = Draft> {
   name: string;
-  onInit?(ctx: { root: FilterApi<TDraft> }): void | Promise<void>;
-  onAfterApply?(ctx: { root: FilterApi<TDraft>; payload: unknown; draft: TDraft }): void | Promise<void>;
-  onSchemaChange?(ctx: { root: FilterApi<TDraft>; prev?: RegisteredSchema<TDraft>; next: RegisteredSchema<TDraft> }):
-    | void
-    | Promise<void>;
+  /**
+   * 可选的依赖声明：该插件依赖的其他插件名称
+   */
+  requires?: string[];
+  /**
+   * 执行优先级：数值越小越先执行，越大越后执行（后执行者覆盖能力更强）
+   */
+  priority?: number;
+  /**
+   * 插件初始化，仅与插件自身相关。数据读写应通过 ctx.root 完成。
+   */
+  onInit?(ctx: PluginInitContext<TDraft>): void | Promise<void>;
+  /**
+   * 插件销毁
+   */
   onDestroy?(ctx: { root: FilterApi<TDraft> }): void | Promise<void>;
 }
 
 export interface FilterListeners<TDraft = Draft> {
   onInit?(ctx: { root: FilterApi<TDraft> }): void;
-  onSchemaLoaded?(ctx: { root: FilterApi<TDraft>; schema: RegisteredSchema<TDraft> }): void;
-  onDraftChange?(draft: TDraft, prev: TDraft): void;
+  onSchemaLoaded?(ctx: {
+    root: FilterApi<TDraft>;
+    schema: RegisteredSchema;
+  }): void;
+  onDraftChange?(draft: TDraft, prev?: TDraft): void;
   onFieldChange?(path: string, value: unknown, prev: unknown): void;
   onApplyStart?(ctx: { draft: TDraft }): void;
   onApplySuccess?(ctx: { draft: TDraft; payload: unknown }): void;
   onApplyError?(err: unknown): void;
+  onValidateFailed?(ctx: { draft: TDraft; errors: Form['errors'] }): void;
   onReset?(ctx: { scope: 'all' | 'field' | 'group'; target?: string }): void;
   onDestroy?(ctx: { root: FilterApi<TDraft> }): void;
 }
 
 export interface FilterOptions<TDraft = Draft> {
+  values?: TDraft;
   defaultValues?: TDraft;
   schemaRegistrar?: SchemaRegistrar<TDraft>;
   external?: JsonRecord;
@@ -120,34 +196,36 @@ export interface FilterOptions<TDraft = Draft> {
   pipeline?: DataPipeline<TDraft>;
   strict?: boolean;
   applyDebounceMs?: number;
+  /**
+   * @name Auto Apply
+   * @description 自动应用草稿数据到表单，默认情况下，当草稿数据发生变化时，会自动应用到表单
+   * @description 当 onInit 为 true 时，会在初始化时自动应用草稿数据到表单
+   * @description 当 onChange 为 true 时，会在草稿数据发生变化时自动应用到表单
+   */
+  autoApply?: {
+    onInit?: boolean;
+    onChange?: boolean;
+  },
   groups?: FilterGroup[];
+  /**
+   * @name Formily Form 配置
+   * @description 配置 Formily Form 不包括 values 和 initialValues 和 effects
+   * @link https://core.formilyjs.org/zh-CN/api/entry/create-form#iformprops
+   */
+  formilyOptions?: Omit<
+    IFormProps<Partial<TDraft>>,
+    'values' | 'initialValues' | 'effects'
+  >;
 }
 
-export interface FieldSnapshot {
-  value: unknown;
-  initialValue: unknown;
-  displayed: boolean;
-  disabled: boolean;
-  validating: boolean;
-  errors: string[];
-  touched: boolean;
-}
-
-// FieldApi - provides a unified interface for field operations
-export interface FieldApi {
-  name: string;
-  value: unknown;
-  error?: string;
-  validating: boolean;
-  visible: boolean;
-  disabled: boolean;
-  touched: boolean;
-  setValue(value: unknown, opts?: { silent?: boolean }): void;
-  reset(mode?: 'initial' | 'default' | 'applied'): void;
-  validate(): Promise<void>;
-  getState(): FieldSnapshot;
-  setState(cb: (field: GeneralField) => void): void;
-}
+// FieldApi - 包装 Formily GeneralField，添加额外的便捷属性
+// 所有 Formily Field 的方法都可以通过这个 API 访问
+export type FieldApi = GeneralField & {
+  // 额外的便捷属性
+  readonly visible: boolean;
+  readonly error?: string;
+  readonly meta: JsonRecord;
+};
 
 export interface HeadlessRootOptions<TDraft = Draft, TRoot = TDraft> {
   id?: string;
@@ -164,38 +242,22 @@ export interface HeadlessRoot<TRoot = Draft> {
   dispose(): void;
 }
 
-export interface LoadOptions<TDraft = Draft> {
+export interface LoadOptions{
   mode?: 'replace' | 'merge';
   decode?: boolean;
 }
 
-// FilterApi - provides a unified interface for filter operations
-export interface FilterApi<TDraft = Draft> extends Partial<Pick<Form, 'id' | 'values'>> {
-  readonly id: string;
-  readonly form: Form;
-  readonly schema?: RegisteredSchema<TDraft>;
-  draft: TDraft;
-  applied?: TDraft;
-  validating: boolean;
+// FilterApi - 基于 Formily Form 的过滤器 API
+// 通过 form 属性访问所有 Formily 原生功能，同时提供过滤器特定功能
+export interface FilterApi<TDraft = Draft> extends ICoreManager<TDraft> {
+  /** 插件命名空间 - 直接暴露 PluginManager 实例 */
+  readonly plugin: PluginManager<TDraft>;
 
-  apply(): Promise<void>;
-  reset(scope?: 'all' | 'group' | string, target?: string): void;
-  resetValue(scope?: 'all' | 'group' | string, target?: string, mode?: 'initial' | 'default' | 'applied'): void;
-  clearErrors(scope?: 'all' | 'group' | string, target?: string): void;
-  validateAll(): Promise<void>;
-  registerOptionSource(path: string, source: OptionSource): void;
-  removeOptionSource(path: string): void;
-  getOptionSource(path: string): OptionSource | undefined;
-  getField(path: string): FieldApi;
-  subscribe(listener: (state: { draft: TDraft; applied?: TDraft }) => void): () => void;
-  setSchemaRegistrar(registrar: SchemaRegistrar<TDraft>, mode?: 'preserve' | 'reset'): void;
-  createHeadlessRoot<TRoot = TDraft>(options?: HeadlessRootOptions<TDraft, TRoot>): HeadlessRoot<TRoot>;
-  load(values: Partial<TDraft>, options?: LoadOptions<TDraft>): void;
-  getPipeline(): DataPipeline<TDraft> | undefined;
-  getGroups(): FilterGroup[];
-  registerDataShard<TSlice = unknown>(options: DataShardOptions<TDraft, TSlice>): DataShardHandle<TSlice>;
-  getPluginState<TState = unknown>(key: string | symbol): TState | undefined;
-  setPluginState<TState = unknown>(key: string | symbol, value: TState | undefined): void;
+  // 预留：其他命名空间（schema/shard/options/group），逐步补齐
+  // readonly schema?: SchemaManager<TDraft>;
+  // readonly shard?: ShardManager<TDraft>;
+  // readonly options?: OptionsManager<TDraft>;
+  // readonly group?: GroupManager<TDraft>;
 }
 
 export interface GlobalDefaults<TDraft = Draft> {
@@ -250,47 +312,4 @@ export interface UseFieldOptions<TDraft = Draft> {
 export interface UseOptionsInput<TDraft = Draft> extends UseFilterInput<TDraft> {
   path: string;
   keyword?: string;
-}
-
-export interface FilterPreset<TDraft = Draft> {
-  id: string;
-  name: string;
-  values: TDraft;
-  metadata?: JsonRecord;
-  updatedAt: number;
-}
-
-export interface PresetStorage<TDraft = Draft> {
-  list(namespace: string): FilterPreset<TDraft>[];
-  get(namespace: string, id: string): FilterPreset<TDraft> | undefined;
-  save(namespace: string, preset: FilterPreset<TDraft>): void;
-  remove(namespace: string, id: string): void;
-  subscribe?(namespace: string, listener: () => void): () => void;
-}
-
-export interface PresetPluginState<TDraft = Draft> {
-  storage: PresetStorage<TDraft>;
-  namespace: string;
-  key: string | symbol;
-}
-
-export interface PresetPluginOptions<TDraft = Draft> {
-  storage?: PresetStorage<TDraft>;
-  namespace?: string;
-  key?: string | symbol;
-  initialPresets?: FilterPreset<TDraft>[];
-}
-
-export interface UseFilterPresetsOptions<TDraft = Draft> extends UseFilterInput<TDraft> {
-  pluginKey?: string | symbol;
-  onApply?(preset: FilterPreset<TDraft>): void;
-}
-
-export interface UseFilterPresetsResult<TDraft = Draft> {
-  presets: FilterPreset<TDraft>[];
-  savePreset(name: string, metadata?: JsonRecord): FilterPreset<TDraft>;
-  applyPreset(id: string): Promise<void>;
-  removePreset(id: string): void;
-  renamePreset(id: string, name: string): void;
-  overwritePreset(id: string, updater: Partial<FilterPreset<TDraft>>): FilterPreset<TDraft> | undefined;
 }

@@ -37,6 +37,7 @@
     "@formily/shared": "^2.3.7",
     "@tanstack/query-core": "^5.49.0",
     "es-toolkit": "^1.40.0",
+    "eventemitter3": "^5.0.1",
     "ts-mixer": "^6.0.4"
   },
   "devDependencies": {

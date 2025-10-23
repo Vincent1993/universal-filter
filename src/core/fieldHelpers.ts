@@ -1,88 +1,40 @@
-import type { Form } from '@formily/core';
-import type { FieldApi, FieldSnapshot } from './types';
+import type { Form, GeneralField } from '@formily/core';
+import type { FieldApi } from './types';
 
-export function readFieldSnapshot(form: Form, path: string): FieldSnapshot {
-  let snapshot: FieldSnapshot = {
-    value: undefined,
-    initialValue: undefined,
-    displayed: true,
-    disabled: false,
-    validating: false,
-    errors: [],
-    touched: false,
-  };
-
-  form.setFieldState(path, (field: any) => {
-    snapshot = {
-      value: field.value,
-      initialValue: field.initialValue,
-      displayed: field.display !== 'none' && field.visible !== false,
-      disabled: Boolean(field.disabled || field.pattern === 'readPretty'),
-      validating: Boolean(field.validating || field.loading),
-      errors: normalizeErrors(field.selfErrors ?? field.errors ?? []),
-      touched: Boolean(field.visited || field.touched || field.mounted),
-    };
-  });
-
-  return snapshot;
-}
-
-function normalizeErrors(errors: unknown[]): string[] {
-  return errors
-    .map((err) => {
-      if (!err) return '';
-      if (typeof err === 'string') return err;
-      if (Array.isArray(err)) return err.join(', ');
-      if (err && typeof err === 'object' && 'message' in err) return String((err as Record<string, unknown>).message);
-      return String(err);
-    })
-    .filter(Boolean);
-}
-
+/**
+ * 创建 FieldApi - 直接基于 Formily Field 进行最小化包装
+ */
 export function createFieldApi(form: Form, path: string): FieldApi {
-  return {
-    name: path,
-    get value() {
-      return readFieldSnapshot(form, path).value;
+  const field = form.query(path).take();
+
+  if (!field) {
+    throw new Error(`Field "${path}" not found in form`);
+  }
+
+  // 直接返回 Formily field，只添加必要的计算属性
+  return Object.assign(field, {
+    get visible() {
+      return field.display === 'visible';
+    },
+    get meta(){
+      return field.data
     },
     get error() {
-      return readFieldSnapshot(form, path).errors[0];
-    },
-    get validating() {
-      return readFieldSnapshot(form, path).validating;
-    },
-    get visible() {
-      return readFieldSnapshot(form, path).displayed;
-    },
-    get disabled() {
-      return readFieldSnapshot(form, path).disabled;
-    },
-    get touched() {
-      return readFieldSnapshot(form, path).touched;
-    },
-    setValue(value: unknown) {
-      (form as any).setFieldValue(path, value);
-    },
-    reset(mode = 'initial') {
-      const field = form.query(path).take() as any;
-      if (!field) return;
-
-      if (mode === 'initial') {
-        field.reset();
-      } else if (mode === 'default') {
-        field.value = field.initialValue;
-      } else if (mode === 'applied') {
-        field.value = field.initialValue;
+      const errors = (field as any).errors || [];
+      if (errors.length === 0) return undefined;
+      const firstError = errors[0];
+      if (typeof firstError === 'string') return firstError;
+      if (firstError && typeof firstError === 'object' && 'message' in firstError) {
+        return String(firstError.message);
       }
+      return String(firstError);
     },
-    async validate() {
-      await form.validate(path);
-    },
-    getState() {
-      return readFieldSnapshot(form, path);
-    },
-    setState(cb) {
-      form.setFieldState(path, cb);
-    },
-  };
+  }) as FieldApi;
+}
+
+/**
+ * 从 path 字符串获取 Field 实例的辅助函数
+ */
+export function getField(form: Form, path: string): GeneralField | undefined {
+  return form.query(path).take();
 }

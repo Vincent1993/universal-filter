@@ -24,9 +24,10 @@ export function createUrlSyncPlugin<TDraft extends Draft = Draft>(
   const decode = options.decode ?? true;
   let suppress = false;
 
-  return {
+  const plugin: Plugin<TDraft> = {
     name: 'url-sync-plugin',
-    onInit({ root }) {
+    priority: 100,
+    async onInit({ root, setReady }) {
       const search = options.adapter.read();
       if (search) {
         const params = parseSearch(search);
@@ -44,8 +45,56 @@ export function createUrlSyncPlugin<TDraft extends Draft = Draft>(
           root.load(cloneDeep(values), { mode, decode });
         });
       }
+      setReady(true);
+      // 在初始化后订阅 apply:success 写回 URL
+      root.events.on(
+        'apply:success',
+        ({ draft, payload }: { draft: TDraft; payload: unknown }) => {
+          const params = serialize({ draft, payload });
+          const next = stringifyParams(params);
+          suppress = true;
+          try {
+            options.adapter.write(next ? `?${next}` : '');
+          } finally {
+            suppress = false;
+          }
+        }
+      );
     },
-    onAfterApply({ draft, payload }) {
+    // 不依赖 onAfterApply；订阅事件总线
+    onDestroy({ root }) {
+      // no-op
+    },
+  };
+  return plugin;
+}
+
+// 订阅 apply:success 并写回 URL（在插件初始化时挂载监听）
+function attachAfterApply<TDraft extends Draft>(
+  root: { events: { on: (event: 'apply:success', cb: (payload: { draft: TDraft; payload: unknown }) => void) => () => void } },
+  options: UrlSyncPluginOptions<TDraft>,
+  serialize: (ctx: { draft: TDraft; payload: unknown }) => Record<string, string | string[] | null | undefined>
+) {
+  let suppress = false;
+  root.events.on('apply:success', ({ draft, payload }: { draft: TDraft; payload: unknown }) => {
+    const params = serialize({ draft, payload });
+    const next = stringifyParams(params);
+    suppress = true;
+    try {
+      options.adapter.write(next ? `?${next}` : '');
+    } finally {
+      suppress = false;
+    }
+  });
+}
+
+// 保留原实现以兼容
+function legacyAfterApply<TDraft extends Draft>(
+  options: UrlSyncPluginOptions<TDraft>,
+  serialize: (ctx: { draft: TDraft; payload: unknown }) => Record<string, string | string[] | null | undefined>
+) {
+  let suppress = false;
+  return ({ draft, payload }: { draft: TDraft; payload: unknown }) => {
       const params = serialize({ draft, payload });
       const next = stringifyParams(params);
       suppress = true;
@@ -54,7 +103,6 @@ export function createUrlSyncPlugin<TDraft extends Draft = Draft>(
       } finally {
         suppress = false;
       }
-    },
   };
 }
 

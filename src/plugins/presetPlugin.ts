@@ -95,13 +95,15 @@ export function createPresetPlugin<TDraft extends Draft = Draft>(
 
   return {
     name: 'preset-plugin',
-    onInit({ root }) {
+    priority: 5,
+    onInit({ root, setReady }) {
       const namespace = options.namespace ?? root.id;
       const state: PresetPluginState<TDraft> = { storage, namespace, key };
       root.setPluginState(key, state);
       for (const preset of initialPresets) {
         storage.save(namespace, { ...preset, updatedAt: preset.updatedAt ?? Date.now() });
       }
+      setReady(true);
     },
     onDestroy({ root }) {
       root.setPluginState(key, undefined);
