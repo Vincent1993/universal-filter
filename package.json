@@ -1,59 +1,21 @@
 {
-  "name": "universal-sheet",
+  "name": "universal-filter-monorepo",
+  "private": true,
   "version": "0.1.0",
-  "description": "Composable filtering system with Formily integration, adapters, and plugins.",
-  "license": "MIT",
-  "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
   "engines": {
     "pnpm": ">=10.0.0"
   },
   "scripts": {
-    "build": "rslib build",
-    "lint": "eslint \"src/**/*.{ts,tsx}\"",
-    "test": "vitest run --reporter=verbose",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "typecheck": "tsc --noEmit"
-  },
-  "keywords": [
-    "filter",
-    "plugin",
-    "adapter"
-  ],
-  "author": "",
-  "files": [
-    "dist"
-  ],
-  "peerDependencies": {
-    "@tanstack/react-query": ">=5",
-    "react": ">=18"
-  },
-  "dependencies": {
-    "@formily/core": "^2.3.7",
-    "@formily/json-schema": "^2.3.7",
-    "@formily/react": "^2.3.7",
-    "@formily/shared": "^2.3.7",
-    "@tanstack/query-core": "^5.49.0",
-    "es-toolkit": "^1.40.0",
-    "eventemitter3": "^5.0.1",
-    "ts-mixer": "^6.0.4"
+    "build": "pnpm --filter universal-sheet build",
+    "lint": "pnpm --filter universal-sheet lint",
+    "test": "pnpm --filter universal-sheet test",
+    "test:watch": "pnpm --filter universal-sheet test:watch",
+    "test:coverage": "pnpm --filter universal-sheet test:coverage",
+    "typecheck": "pnpm --filter universal-sheet typecheck",
+    "playground": "pnpm --filter playground dev",
+    "playground:build": "pnpm --filter playground build"
   },
   "devDependencies": {
-    "@rslib/core": "^0.15.1",
-    "@testing-library/react": "^16.3.0",
-    "@testing-library/react-hooks": "^8.0.1",
-    "@types/react": "^18.2.0",
-    "@typescript-eslint/eslint-plugin": "^8.46.2",
-    "@typescript-eslint/parser": "^8.46.2",
-    "@vitest/coverage-v8": "^3.2.4",
-    "eslint": "^8.56.0",
-    "eslint-config-prettier": "^10.1.8",
-    "jsdom": "^27.0.1",
-    "react": "^18.2.0",
-    "react-dom": "^18.3.1",
-    "typescript": "^5.9.3",
-    "vitest": "^3.2.4"
+    "shadcn": "^3.4.2"
   }
 }
