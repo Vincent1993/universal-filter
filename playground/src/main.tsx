@@ -8,6 +8,7 @@ import './styles/globals.css';
 const router = createRouter({
   routeTree,
   defaultPreload: 'intent',
+  basepath: '/universal-filter/',
 });
 
 // 注册路由类型

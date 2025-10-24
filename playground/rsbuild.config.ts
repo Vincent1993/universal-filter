@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [pluginReact()],
   source: {
     entry: {
-      index: './src/main.tsx',
+      'index': './src/main.tsx',
     },
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -15,6 +15,9 @@ export default defineConfig({
   },
   html: {
     title: 'Universal Filter Playground',
+  },
+  output: {
+    assetPrefix: '/universal-filter/',
   },
   tools: {
     rspack: {

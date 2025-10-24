@@ -22,11 +22,6 @@ function RootComponent() {
         <SiteHeader />
          {/* Main Content */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Header */}
-        <header className="flex h-14 items-center border-b bg-card px-6">
-          <h1 className="text-xl font-semibold">Universal Filter Playground</h1>
-        </header>
-
         {/* Page Content */}
         <main className="flex-1 overflow-y-auto p-6">
           <Outlet />

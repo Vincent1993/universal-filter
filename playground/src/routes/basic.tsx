@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useMemo, useState } from 'react';
-import {  Button, theme } from 'antd';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {  Button } from 'antd';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   ReloadOutlined,
@@ -15,8 +15,9 @@ import {
   FormButtonGroup,
 } from '@formily/antd-v5';
 import { ISchema } from '@formily/json-schema';
-import { createFilter, FilterProvider, useFilter } from '@dfx/universal-filter';
+import { createFilter, FilterProvider, useFilter, createUrlSyncPlugin } from '@dfx/universal-filter';
 import { FilterStateViewer } from '@/components/filter-state-viewer';
+import {  JsonEditor } from '@/components/json-config-editor';
 
 
 type DemoDraft = {
@@ -37,7 +38,7 @@ const SchemaField = createSchemaField({
 });
 
 // 定义 JSON Schema
-const filterSchema: ISchema = {
+const json: ISchema = {
   type: 'object',
   properties: {
     keyword: {
@@ -92,9 +93,8 @@ const filterSchema: ISchema = {
 
 const FilterControls = () => {
   const filter = useFilter<DemoDraft>();
+  const [filterSchema, setFilterSchema] = useState(json);
   const [isApplying, setIsApplying] = useState(false);
-  const { token } = theme.useToken();
-
   const handleApply = async () => {
     setIsApplying(true);
     try {
@@ -103,10 +103,17 @@ const FilterControls = () => {
       setIsApplying(false);
     }
   };
-
   const handleReset = () => {
+    console.log(filter.getForm().getInitialValuesIn('*'), filter.getDefaultValues())
     filter.reset();
   };
+
+  const handleSchemaChange = useCallback((value: string) => {
+    filter.form.clearFormGraph('*');
+    setFilterSchema(JSON.parse(value))
+  }, [filterSchema]);
+
+  console.log(filter.getDraft())
 
   return (
     <Card>
@@ -116,7 +123,7 @@ const FilterControls = () => {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <SchemaField schema={filterSchema} />
+        <SchemaField schema={filterSchema} key={JSON.stringify(filterSchema)}/>
         <FormButtonGroup align="right">
           <Button onClick={handleReset} icon={<ReloadOutlined />}>
             重置
@@ -130,6 +137,13 @@ const FilterControls = () => {
             应用筛选
           </Button>
         </FormButtonGroup>
+        <JsonEditor
+          value={JSON.stringify(filterSchema, null, 2)}
+          onChange={handleSchemaChange}
+          schema={filterSchema}
+          height="400px"
+          className="mt-4"
+        />
       </CardContent>
     </Card>
   );
@@ -139,6 +153,7 @@ function BasicPage() {
   const filter = useMemo(
     () =>
       createFilter<DemoDraft>({
+        plugins: [createUrlSyncPlugin({ syncToInitialValues: true })],
         defaultValues: {
           keyword: '',
           category: 'books',
@@ -147,6 +162,7 @@ function BasicPage() {
       }),
     []
   );
+
 
   return (
     <FilterProvider instance={filter}>

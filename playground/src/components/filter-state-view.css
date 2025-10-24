@@ -1,12 +1,18 @@
 [data-scope='json-tree-view'][data-part='tree'] {
-  margin-top: 20px;
   --padding-inline: 8px;
   --icon-size: 16px;
   --half-icon-size: calc(var(--icon-size) / 2);
+  --indent-guide-offset: 8px;
+
+  padding: 6px;
+  background: hsl(var(--background));
+  border-radius: 6px;
+  border: 1px solid hsl(var(--border));
 
   * {
-    font-family: monospace;
-    font-size: 12px;
+    font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+    font-size: 13px;
+    line-height: 1.5;
   }
 }
 
@@ -15,39 +21,67 @@
   user-select: none;
   padding-inline-start: calc(var(--depth) * var(--padding-inline));
   padding-inline-end: var(--padding-inline);
+  padding-block: 2px;
   display: flex;
   align-items: center;
-  border-radius: 2px;
-  min-height: 18px;
+  gap: 6px;
+  border-radius: 4px;
+  min-height: 28px;
+  cursor: pointer;
 
   & svg {
     width: var(--icon-size);
     height: var(--icon-size);
-    opacity: 0.5;
+    opacity: 0.6;
+    flex-shrink: 0;
   }
 
   &:hover {
-    background: rgb(243, 243, 243);
+    background: hsl(var(--accent) / 0.5);
+
+    & svg {
+      opacity: 1;
+    }
   }
 
   &[data-selected] {
-    background: rgb(226, 226, 226);
+    background: hsl(var(--accent));
   }
 
   &:focus {
-    outline: 1px solid rgb(148, 148, 148);
-    outline-offset: -1px;
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 0;
+  }
+
+  &:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
   }
 }
 
 [data-scope='json-tree-view'][data-part='item'] {
-  padding-inline-start: calc(var(--depth) * var(--padding-inline) + var(--half-icon-size));
+  padding-inline-start: calc(var(--depth) * var(--padding-inline) + var(--icon-size) + 6px);
   padding-inline-end: var(--padding-inline);
 }
 
 [data-scope='json-tree-view'][data-part='item-text'],
 [data-scope='json-tree-view'][data-part='branch-text'] {
   flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: hsl(var(--foreground));
+}
+
+[data-scope='json-tree-view'][data-part='item-text'] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+[data-scope='json-tree-view'][data-part='branch-text'] {
+  font-weight: 500;
+  color: hsl(var(--foreground) / 0.9);
 }
 
 [data-scope='json-tree-view'][data-part='branch-content'] {
@@ -58,42 +92,25 @@
 [data-scope='json-tree-view'][data-part='branch-indent-guide'] {
   position: absolute;
   content: '';
-  border-left: 1px solid rgb(226, 226, 226);
+  border-left: 1px solid hsl(var(--border) / 0.5);
   height: 100%;
-  translate: calc(var(--depth) * 1.25rem);
+  left: calc(var(--depth) * var(--padding-inline) + var(--indent-guide-offset));
   z-index: 0;
+  opacity: 0.6;
 }
 
 [data-scope='json-tree-view'][data-part='branch-indicator'] {
   display: flex;
   align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 
   &[data-state='open'] svg {
     transform: rotate(90deg);
   }
-}
 
-@keyframes slideDown {
-  from {
-    opacity: 0.01;
-    height: 0;
-  }
-
-  to {
-    opacity: 1;
-    height: var(--height);
-  }
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 1;
-    height: var(--height);
-  }
-
-  to {
-    opacity: 0.01;
-    height: 0;
+  &[data-state='closed'] svg {
+    transform: rotate(0deg);
   }
 }
 
@@ -101,4 +118,48 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+}
+
+/* 键名样式 */
+[data-scope='json-tree-view'] [data-key] {
+  color: hsl(var(--primary));
+  font-weight: 500;
+}
+
+/* 值样式 */
+[data-scope='json-tree-view'] [data-value] {
+  color: hsl(var(--muted-foreground));
+}
+
+/* 不同类型的值样式 */
+[data-scope='json-tree-view'] [data-type='string'] {
+  color: hsl(142 76% 36%);
+}
+
+[data-scope='json-tree-view'] [data-type='number'] {
+  color: hsl(221 83% 53%);
+}
+
+[data-scope='json-tree-view'] [data-type='boolean'] {
+  color: hsl(262 83% 58%);
+}
+
+[data-scope='json-tree-view'] [data-type='null'] {
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+  opacity: 0.7;
+}
+
+/* 数组和对象的徽章样式 */
+[data-scope='json-tree-view'] [data-badge] {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  font-weight: 500;
+  margin-left: 6px;
 }
