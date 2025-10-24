@@ -1,4 +1,4 @@
-import qs from 'query-string';
+import qs, { ParsedUrl } from 'query-string';
 import type { Draft, Plugin } from '../core/types';
 import type { IFormMergeStrategy } from '@formily/core';
 
@@ -8,53 +8,55 @@ export interface UrlSyncPluginOptions<TDraft extends Draft> {
     draft: TDraft;
     payload: unknown;
   }) => Record<string, string | string[] | null | undefined>;
+  /**
+   * 从 URL 中解析出草稿数据
+   */
   deserialize?: (params: Record<string, string | string[]>) => Partial<TDraft>;
-  decode?: boolean;
-  mode?: IFormMergeStrategy;
+  /**
+   * URL 值与当前默认值的合并策略，默认为覆盖
+   * @default 'overwrite'
+   * @description 当 URL 值与当前默认值不同时，如何合并 URL 值到默认值，支持 'overwrite - 覆盖' | 'merge - 合并' | 'deepMerge - 深度合并' | 'shallowMerge - 浅层合并'
+   */
+  mergeStrategy?: IFormMergeStrategy;
+  /**
+   * 提交时是否同步至 URL
+   */
+  syncToUrl?: boolean;
+  /**
+   * 初始化时是否同步 URL 的 query 到默认值
+   * @default true
+   */
+  syncToInitialValues?: boolean;
+}
+
+function parseFromUrl(): ParsedUrl {
+  return qs.parseUrl(window.location.href, {
+    arrayFormat: 'comma',
+    parseNumbers: true,
+    parseBooleans: true,
+    decode: true,
+  });
 }
 
 export function createUrlSyncPlugin<TDraft extends Draft = Draft>(
   options: UrlSyncPluginOptions<TDraft>
 ): Plugin<TDraft> {
-  const mode = options.mode ?? 'merge';
-  let suppress = false;
+  const mergeStrategy = options?.mergeStrategy ?? 'overwrite';
+  const syncToInitialValues = options?.syncToInitialValues ?? true;
 
   const plugin: Plugin<TDraft> = {
     name: 'url-sync-plugin',
     priority: 100,
     async onInit({ root, setReady }) {
-      const search = qs.parseUrl(window.location.href, {
-        arrayFormat: 'comma',
-        parseNumbers: true,
-        parseBooleans: true
-      }).query;
+      const search = parseFromUrl().query;
 
-      if (search) {
-        if (search && Object.keys(search).length > 0) {
-          root.setInitialValues(search as Partial<TDraft>, mode);
-        }
+      if (search && Object.keys(search).length > 0 && syncToInitialValues) {
+        // root.setValues(search as Partial<TDraft>, mergeStrategy);
+        root.form.setValues(search as Partial<TDraft>, mergeStrategy);
+        root.setInitialValues(search as Partial<TDraft>, mergeStrategy);
       }
 
-
       setReady(true);
-      // 在初始化后订阅 apply:success 写回 URL
-      // root..on(
-      //   'apply:success',
-      //   ({ draft, payload }: { draft: TDraft; payload: unknown }) => {
-      //     const params = serialize({ draft, payload });
-      //     const next = stringifyParams(params);
-      //     suppress = true;
-      //     try {
-      //       options.adapter.write(next ? `?${next}` : '');
-      //     } finally {
-      //       suppress = false;
-      //     }
-      //   }
-      // );
-    },
-    // 不依赖 onAfterApply；订阅事件总线
-    onDestroy({ root }) {
-      // no-op
     },
   };
   return plugin;

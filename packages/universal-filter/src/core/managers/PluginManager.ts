@@ -44,7 +44,6 @@ export class PluginManager<TDraft extends Draft> {
    * @name runInit
    * @description 执行所有插件的初始化钩子
    * @param filter - FilterApi 实例
-   * @returns {Promise<void>}
    * @internal
    */
   async runInit(filter: FilterApi<TDraft>): Promise<void> {
@@ -59,12 +58,25 @@ export class PluginManager<TDraft extends Draft> {
             this.pluginReady.set(plugin.name, { ready, error });
             this.bus.emit('plugin:ready', { name, ready, error });
           },
+          bus: this.bus,
           isReady: () => this.pluginReady.get(plugin.name)?.ready === true,
         });
       }
     }
     this.bus.emit('plugins:ready', { ready: this.ready });
   }
+
+  dispose() {
+    const ordered = this.sortByRequiresAndPriority(this.plugins);
+    for (const plugin of ordered) {
+      if (typeof plugin.onInit === 'function') {
+        plugin?.onDestroy?.();
+      }
+    }
+
+    this.bus.emit('plugins:destroyed');
+  }
+
 
   /**
    * @name ready
@@ -75,18 +87,6 @@ export class PluginManager<TDraft extends Draft> {
   get ready(): boolean {
     return Array.from(this.pluginReady.values()).every(({ ready }) => ready);
   }
-
-  /**
-   * @name count
-   * @description 插件数量
-   * @type {number}
-   * @readonly
-   */
-  get count(): number {
-    return this.plugins.length;
-  }
-
-
   /**
    * 根据依赖关系和优先级对插件进行拓扑排序
    *

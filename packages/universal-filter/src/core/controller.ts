@@ -11,7 +11,7 @@ import { getGlobalConfigure } from '../context';
  */
 export class FilterController<TDraft extends Draft> extends CoreManager<TDraft> {
   // ============== 内部事件总线 ==============
-  private readonly _bus = new EventEmitter();
+  readonly _bus = new EventEmitter();
 
   // ============== 模块命名空间 ==============
   readonly plugin: PluginManager<TDraft>;
@@ -48,17 +48,20 @@ export class FilterController<TDraft extends Draft> extends CoreManager<TDraft> 
     // 7. autoApply 逻辑
     if (optionsConfig.autoApply?.onInit) {
       this._bus.once('plugins:ready', ({ ready }) => {
-        if (ready) void this.apply();
+        if (ready) queueMicrotask(() => void this.apply());
       });
-      if (this.plugin.count === 0) {
-        queueMicrotask(() => void this.apply());
-      }
     }
     // 8. autoApply 逻辑
     if (optionsConfig.autoApply?.onChange) {
-      this._bus.on('draft:change', () => {
-        this.apply()
-      });
+      this._bus.on('draft:change', () => queueMicrotask(() => void this.apply()));
     }
+  }
+
+  dispose() {
+    // 清理所有事件监听器
+    this._bus.removeAllListeners()
+
+    // 清理所有插件
+    this.plugin.dispose();
   }
 }

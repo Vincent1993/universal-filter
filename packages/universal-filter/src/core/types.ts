@@ -2,6 +2,8 @@ import type { Form, GeneralField, IFormProps } from '@formily/core';
 import type { ISchema } from '@formily/json-schema';
 import type { ReactNode } from 'react';
 import type { CoreManager } from './managers';
+import type EventEmitter from 'eventemitter3';
+
 import type { PluginManager } from './managers/PluginManager';
 
 export type Draft = Record<string, unknown>;
@@ -144,6 +146,7 @@ export interface Module<TDraft extends Draft = Draft, TOptions = unknown> {
 
 export interface PluginInitContext<TDraft extends Draft = Draft> {
   root: FilterApi<TDraft>;
+  bus: EventEmitter;
   setReady(ready: boolean, error?: unknown): void;
   isReady(): boolean;
 }
@@ -165,7 +168,7 @@ export interface Plugin<TDraft extends Draft = Draft> {
   /**
    * 插件销毁
    */
-  onDestroy?(ctx: { root: FilterApi<TDraft> }): void | Promise<void>;
+  onDestroy?(): void;
 }
 
 export interface FilterListeners<TDraft extends Draft = Draft> {

@@ -64,7 +64,7 @@ export class CoreManager<TDraft extends Draft> {
   /** 上一次的快照 (apply 之前的状态) */
   private _previousSnapshot?: TDraft;
   /** 事件发射函数 (由 Controller 提供) */
-  private emitFn?: <K extends keyof FilterEventMap<TDraft>>(
+  emitFn?: <K extends keyof FilterEventMap<TDraft>>(
     event: K,
     payload: FilterEventMap<TDraft>[K]
   ) => void;
@@ -100,14 +100,14 @@ export class CoreManager<TDraft extends Draft> {
    * 获取当前草稿状态（Formily Proxy，用于表单字段绑定）
    */
   get draft(): TDraft {
-    return this.form.values as TDraft;
+    return cloneDeep(this.form.values) as TDraft;
   }
 
   /**
    * 获取草稿的深拷贝快照（普通对象，适用于 React 渲染）
    */
   getDraft(): TDraft {
-    return cloneDeep(this.form.values) as TDraft;
+    return this.form.getState().values as TDraft;
   }
 
   // ==================== 已应用状态 (Applied) ====================
@@ -123,7 +123,7 @@ export class CoreManager<TDraft extends Draft> {
    * 获取已应用状态的副本（最后一次成功提交的状态）
    */
   getApplied(): TDraft | undefined {
-    return this._appliedSnapshot;
+    return this._appliedSnapshot as TDraft;
   }
 
   // ==================== 上一次状态 (Previous) ====================
@@ -191,7 +191,7 @@ export class CoreManager<TDraft extends Draft> {
    * 获取默认值
    */
   getDefaultValues(): TDraft | undefined {
-    return this.defaultValues;
+    return this.form.getInitialValuesIn('*') as TDraft;
   }
 
   /**
@@ -223,8 +223,7 @@ export class CoreManager<TDraft extends Draft> {
    * 重置所有字段到默认值
    */
   reset(): void {
-    this.form.reset('*', { forceClear: true, validate: false });
-    this.form.setValues(this.defaultValues, 'overwrite');
+    this.form.reset('*', { forceClear: false, validate: false });
     this.listeners?.onReset?.({ scope: 'all' });
     this.emitFn?.('reset', { scope: 'all' });
   }
@@ -270,7 +269,10 @@ export class CoreManager<TDraft extends Draft> {
     values: Partial<TDraft>,
     strategy?: IFormMergeStrategy
   ): void {
-    this.form.setInitialValues(values, strategy);
+    // 切断引用
+    const plainObject = cloneDeep(values) as unknown as TDraft;
+    this.defaultValues = plainObject;
+    this.form.setInitialValues(plainObject, strategy);
   }
 
   // ==================== 内部方法: Apply 流程管理 ====================
@@ -285,22 +287,22 @@ export class CoreManager<TDraft extends Draft> {
           prev: this._previousSnapshot,
         });
       });
-      onFormSubmitStart(() => {
+      onFormSubmitStart((form) => {
         this._previousSnapshot = cloneDeep(this.draft);
-        const current = this.draft;
+        const current = cloneDeep(form.values) as TDraft;
         this.listeners?.onApplyStart?.({ draft: current });
         this.emitFn?.('apply:start', { draft: current });
       });
-      onFormSubmitSuccess(() => {
-        this._appliedSnapshot = cloneDeep(this.draft);
+      onFormSubmitSuccess((form) => {
+        this._appliedSnapshot = form.getState().values as TDraft;
         const current = this.draft;
-        const payload = this.form.values;
+        const payload = cloneDeep(form.values) as TDraft;
         this.listeners?.onApplySuccess?.({ draft: current, payload });
         this.emitFn?.('apply:success', { draft: current, payload });
       });
       onFormValidateFailed((form) => {
         const errors = form.getState().errors;
-        const current = this.draft;
+        const current = form.getFormState().values;
         this.listeners?.onValidateFailed?.({ draft: current, errors });
         this.emitFn?.('validate:failed', { draft: current, errors });
       });
