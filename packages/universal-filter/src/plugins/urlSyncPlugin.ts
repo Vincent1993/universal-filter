@@ -39,19 +39,17 @@ function parseFromUrl(): ParsedUrl {
 }
 
 export function createUrlSyncPlugin<TDraft extends Draft = Draft>(
-  options: UrlSyncPluginOptions<TDraft>
+  options: UrlSyncPluginOptions<TDraft> = {}
 ): Plugin<TDraft> {
   const mergeStrategy = options?.mergeStrategy ?? 'overwrite';
   const syncToInitialValues = options?.syncToInitialValues ?? true;
 
   const plugin: Plugin<TDraft> = {
     name: 'url-sync-plugin',
-    priority: 100,
     async onInit({ root, setReady }) {
       const search = parseFromUrl().query;
 
       if (search && Object.keys(search).length > 0 && syncToInitialValues) {
-        // root.setValues(search as Partial<TDraft>, mergeStrategy);
         root.form.setValues(search as Partial<TDraft>, mergeStrategy);
         root.setInitialValues(search as Partial<TDraft>, mergeStrategy);
       }

@@ -153,7 +153,34 @@ function BasicPage() {
   const filter = useMemo(
     () =>
       createFilter<DemoDraft>({
-        plugins: [createUrlSyncPlugin({ syncToInitialValues: true })],
+        plugins: [
+          // 1. 简单插件对象
+          createUrlSyncPlugin({ syncToInitialValues: true }),
+
+          // 2. 工厂函数示例：可以访问 root 和使用 push/shift/remove 辅助函数
+          ({ root, push, shift, remove }) => {
+            // 可以根据条件动态添加插件
+            if (typeof window !== 'undefined' && window.localStorage) {
+              // 使用 push 在末尾添加插件
+              push({
+                name: 'console-logger',
+                onInit: ({ bus }) => {
+                  bus.on('draft:change', ({ draft }) => {
+                    console.log('Draft changed:', draft);
+                  });
+                },
+              });
+            }
+
+            // 返回主插件
+            return {
+              name: 'demo-plugin',
+              onInit: () => {
+                console.log('Demo plugin initialized with filter:', root.id);
+              },
+            };
+          },
+        ],
         defaultValues: {
           keyword: '',
           category: 'books',

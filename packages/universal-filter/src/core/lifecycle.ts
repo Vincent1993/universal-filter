@@ -1,16 +1,5 @@
 import { cloneDeep, merge } from 'es-toolkit';
-import type { FilterListeners, Plugin } from './types';
-
-export function mergePlugins<T>(
-  base: Plugin<T>[],
-  extra: Plugin<T>[],
-  strategy: 'prepend' | 'append'
-): Plugin<T>[] {
-  if (strategy === 'prepend') {
-    return [...extra, ...base];
-  }
-  return [...base, ...extra];
-}
+import type { FilterListeners } from './types';
 
 export function mergeListeners<T>(
   base: FilterListeners<T> | undefined,

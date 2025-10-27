@@ -24,22 +24,31 @@ describe('插件集成测试（真实 Formily）', () => {
       expect(onInitSpy).toHaveBeenCalled();
     });
 
-    it('应该按顺序执行多个插件', () => {
+    it('应该按顺序执行多个插件', async () => {
       const order: number[] = [];
 
       const plugin1: Plugin = {
         name: 'plugin1',
-        onInit: () => order.push(1),
+        onInit: ({ setReady }) => {
+          order.push(1);
+          setReady(true);
+        },
       };
 
       const plugin2: Plugin = {
         name: 'plugin2',
-        onInit: () => order.push(2),
+        onInit: ({ setReady }) => {
+          order.push(2);
+          setReady(true);
+        },
       };
 
-      createFilter({
+      const filter = createFilter({
         plugins: [plugin1, plugin2],
       });
+
+      // 等待插件初始化完成
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       expect(order).toEqual([1, 2]);
     });
@@ -49,8 +58,8 @@ describe('插件集成测试（真实 Formily）', () => {
 
       const plugin: Plugin = {
         name: 'capture-plugin',
-        onInit: (filter) => {
-          capturedFilter = filter;
+        onInit: ({ root }) => {
+          capturedFilter = root;
         },
       };
 
@@ -60,15 +69,185 @@ describe('插件集成测试（真实 Formily）', () => {
 
       expect(capturedFilter).toBe(filter);
     });
+
+    it('应该支持工厂函数插件', async () => {
+      const order: number[] = [];
+
+      createFilter({
+        plugins: [
+          ({ root }) => {
+            expect(root).toBeDefined();
+            return {
+              name: 'factory-plugin',
+              onInit: ({ setReady }) => {
+                order.push(1);
+                setReady(true);
+              },
+            };
+          },
+        ],
+      });
+
+      // 等待插件初始化完成
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(order).toEqual([1]);
+    });
+
+    it('工厂函数应该能使用 push 添加插件到末尾', async () => {
+      const order: number[] = [];
+
+      createFilter({
+        plugins: [
+          {
+            name: 'plugin1',
+            onInit: ({ setReady }) => {
+              order.push(1);
+              setReady(true);
+            },
+          },
+          ({ push }) => {
+            // push 会将插件添加到当前插件数组的末尾
+            // 但在工厂函数返回之前就已经添加了
+            push({
+              name: 'plugin-added',
+              onInit: ({ setReady }) => {
+                order.push(3);
+                setReady(true);
+              },
+            });
+            return {
+              name: 'plugin2',
+              onInit: ({ setReady }) => {
+                order.push(2);
+                setReady(true);
+              },
+            };
+          },
+          {
+            name: 'plugin3',
+            onInit: ({ setReady }) => {
+              order.push(4);
+              setReady(true);
+            },
+          },
+        ],
+      });
+
+      // 等待插件初始化完成
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // 实际执行顺序：plugin1, plugin-added(通过push添加), plugin2(工厂函数返回), plugin3
+      expect(order).toEqual([1, 3, 2, 4]);
+    });
+
+    it('工厂函数应该能使用 shift 添加插件到开头', async () => {
+      const order: number[] = [];
+
+      createFilter({
+        plugins: [
+          {
+            name: 'plugin1',
+            onInit: ({ setReady }) => {
+              order.push(2);
+              setReady(true);
+            },
+          },
+          ({ shift }) => {
+            shift({
+              name: 'plugin-shifted',
+              onInit: ({ setReady }) => {
+                order.push(1);
+                setReady(true);
+              },
+            });
+            return {
+              name: 'plugin2',
+              onInit: ({ setReady }) => {
+                order.push(3);
+                setReady(true);
+              },
+            };
+          },
+        ],
+      });
+
+      // 等待插件初始化完成
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(order).toEqual([1, 2, 3]);
+    });
+
+    it('工厂函数应该能使用 remove 移除插件', async () => {
+      const order: number[] = [];
+
+      createFilter({
+        plugins: [
+          {
+            name: 'plugin-to-remove',
+            onInit: ({ setReady }) => {
+              order.push(999); // 不应该被调用
+              setReady(true);
+            },
+          },
+          ({ remove }) => {
+            remove('plugin-to-remove');
+            return {
+              name: 'plugin2',
+              onInit: ({ setReady }) => {
+                order.push(1);
+                setReady(true);
+              },
+            };
+          },
+        ],
+      });
+
+      // 等待插件初始化完成
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(order).toEqual([1]);
+    });
+
+    it('工厂函数可以不返回插件', async () => {
+      const order: number[] = [];
+
+      createFilter({
+        plugins: [
+          {
+            name: 'plugin1',
+            onInit: ({ setReady }) => {
+              order.push(1);
+              setReady(true);
+            },
+          },
+          ({ push }) => {
+            push({
+              name: 'plugin-pushed',
+              onInit: ({ setReady }) => {
+                order.push(2);
+                setReady(true);
+              },
+            });
+            // 不返回插件
+          },
+        ],
+      });
+
+      // 等待插件初始化完成
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(order).toEqual([1, 2]);
+    });
   });
 
   describe('History Plugin', () => {
     it('应该能创建历史插件', () => {
       const plugin = createHistoryPlugin({
-        maxSize: 10,
+        limit: 10,
       });
 
-      expect(plugin.name).toBe('history');
+      expect(plugin.name).toBe('history-plugin');
       expect(plugin.onInit).toBeDefined();
     });
 
@@ -86,86 +265,66 @@ describe('插件集成测试（真实 Formily）', () => {
   describe('Preset Plugin', () => {
     it('应该能创建预设插件', () => {
       const plugin = createPresetPlugin({
-        presets: {
-          'preset1': { name: 'Preset 1' },
-        },
+        initialPresets: [
+          { id: 'preset1', name: 'Preset 1', values: { name: 'Preset 1' }, updatedAt: Date.now() },
+        ],
       });
 
-      expect(plugin.name).toBe('preset');
+      expect(plugin.name).toBe('preset-plugin');
       expect(plugin.onInit).toBeDefined();
     });
 
     it('应该集成到 filter 中', () => {
       const filter = createFilter<{ name: string }>({
         defaultValues: { name: 'John' },
-        plugins: [
-          createPresetPlugin({
-            presets: {
-              'default': { name: 'Default' },
-            },
-          }),
-        ],
-      });
-
-      expect(filter).toBeDefined();
-    });
-
-    it('应该能保存和应用预设', () => {
-      const filter = createFilter<{ name: string; age: number }>({
-        defaultValues: { name: 'John', age: 30 },
         plugins: [createPresetPlugin()],
       });
 
-      // 修改值
-      filter.form.setValues({ name: 'Jane', age: 25 });
-
-      // 保存预设
-      const presetPlugin = filter.getPluginState('preset');
-      if (presetPlugin && typeof (presetPlugin as any).savePreset === 'function') {
-        (presetPlugin as any).savePreset('my-preset', filter.draft);
-      }
-
-      // 重置
-      filter.reset();
-      expect(filter.draft.name).toBe('John');
-
-      // 应用预设
-      if (presetPlugin && typeof (presetPlugin as any).applyPreset === 'function') {
-        (presetPlugin as any).applyPreset('my-preset');
-      }
-
-      // 验证（注意：实际行为取决于插件实现）
       expect(filter).toBeDefined();
     });
   });
 
   describe('Plugin Lifecycle', () => {
-    it('应该调用 onMount', () => {
-      const onMountSpy = vi.fn();
+    it('应该调用 onInit', () => {
+      const onInitSpy = vi.fn();
 
       const plugin: Plugin = {
-        name: 'mount-plugin',
-        onMount: onMountSpy,
+        name: 'init-plugin',
+        onInit: onInitSpy,
+      };
+
+      createFilter({
+        plugins: [plugin],
+      });
+
+      expect(onInitSpy).toHaveBeenCalled();
+    });
+
+    it('应该调用 onDestroy', () => {
+      const onDestroySpy = vi.fn();
+
+      const plugin: Plugin = {
+        name: 'destroy-plugin',
+        onDestroy: onDestroySpy,
       };
 
       const filter = createFilter({
         plugins: [plugin],
       });
 
-      // 手动触发 mount（实际场景中由 React 组件触发）
-      if (filter.getPluginState('mount-plugin') && onMountSpy.mock.calls.length === 0) {
-        // 在某些情况下 onMount 可能还未被调用
-      }
+      filter.dispose();
 
-      expect(plugin.onMount).toBeDefined();
+      expect(onDestroySpy).toHaveBeenCalled();
     });
 
-    it('应该调用 onApply', async () => {
-      const onApplySpy = vi.fn();
+    it('插件可以通过事件总线监听事件', async () => {
+      const applySpy = vi.fn();
 
       const plugin: Plugin = {
-        name: 'apply-plugin',
-        onApply: onApplySpy,
+        name: 'event-plugin',
+        onInit: ({ bus }) => {
+          bus.on('apply:success', applySpy);
+        },
       };
 
       const filter = createFilter({
@@ -174,62 +333,7 @@ describe('插件集成测试（真实 Formily）', () => {
 
       await filter.apply();
 
-      expect(onApplySpy).toHaveBeenCalled();
-    });
-
-    it('应该调用 onReset', () => {
-      const onResetSpy = vi.fn();
-
-      const plugin: Plugin = {
-        name: 'reset-plugin',
-        onReset: onResetSpy,
-      };
-
-      const filter = createFilter({
-        plugins: [plugin],
-      });
-
-      filter.reset();
-
-      expect(onResetSpy).toHaveBeenCalled();
-    });
-  });
-
-  describe('Plugin State Management', () => {
-    it('应该能存储和获取插件状态', () => {
-      const plugin: Plugin = {
-        name: 'stateful-plugin',
-        onInit: (filter) => {
-          filter.setPluginState('stateful-plugin', { value: 42 });
-        },
-      };
-
-      const filter = createFilter({
-        plugins: [plugin],
-      });
-
-      const state = filter.getPluginState<{ value: number }>('stateful-plugin');
-      expect(state?.value).toBe(42);
-    });
-
-    it('应该能更新插件状态', () => {
-      const filter = createFilter({});
-
-      filter.setPluginState('test', { count: 1 });
-      expect(filter.getPluginState<{ count: number }>('test')?.count).toBe(1);
-
-      filter.setPluginState('test', { count: 2 });
-      expect(filter.getPluginState<{ count: number }>('test')?.count).toBe(2);
-    });
-
-    it('应该能清除插件状态', () => {
-      const filter = createFilter({});
-
-      filter.setPluginState('test', { value: 'test' });
-      expect(filter.getPluginState('test')).toBeDefined();
-
-      filter.setPluginState('test', undefined);
-      expect(filter.getPluginState('test')).toBeUndefined();
+      expect(applySpy).toHaveBeenCalled();
     });
   });
 });

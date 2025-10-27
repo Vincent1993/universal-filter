@@ -22,10 +22,9 @@ export function createHistoryPlugin<TDraft extends Draft = Record<string, unknow
 
   return {
     name: 'history-plugin',
-    priority: 10,
-    onInit({ root, setReady }) {
+    onInit({ root, setReady, bus }) {
       push(root.draft, root.applied);
-      root.events.on('apply:success', ({ draft, payload }) => {
+      bus.on('apply:success', ({ draft, payload }) => {
         push(draft as TDraft, payload);
       });
       setReady(true);

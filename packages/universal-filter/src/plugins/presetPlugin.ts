@@ -82,6 +82,9 @@ class NamespacedMemoryPresetStorage<TDraft extends Draft> implements PresetStora
 
 const globalPresetStorage = new NamespacedMemoryPresetStorage<Record<string, unknown>>();
 
+// WeakMap to store plugin state keyed by FilterApi instance
+const pluginStateMap = new WeakMap<any, PresetPluginState<any>>();
+
 export function createMemoryPresetStorage<TDraft extends Draft>(): PresetStorage<TDraft> {
   return new NamespacedMemoryPresetStorage<TDraft>();
 }
@@ -95,20 +98,28 @@ export function createPresetPlugin<TDraft extends Draft = Draft>(
 
   return {
     name: 'preset-plugin',
-    priority: 5,
     onInit({ root, setReady }) {
       const namespace = options.namespace ?? root.id;
       const state: PresetPluginState<TDraft> = { storage, namespace, key };
-      root.setPluginState(key, state);
+      // Store state in WeakMap instead of on FilterApi
+      pluginStateMap.set(root, state);
       for (const preset of initialPresets) {
         storage.save(namespace, { ...preset, updatedAt: preset.updatedAt ?? Date.now() });
       }
       setReady(true);
     },
-    onDestroy({ root }) {
-      root.setPluginState(key, undefined);
+    onDestroy() {
+      // WeakMap entries are automatically cleaned up when FilterApi is garbage collected
     },
   };
+}
+
+// Helper function to get plugin state
+function getPluginState<TDraft extends Draft = Draft>(
+  filterApi: any,
+  pluginKey: symbol | string = DEFAULT_PRESET_KEY
+): PresetPluginState<TDraft> | undefined {
+  return pluginStateMap.get(filterApi);
 }
 
 export function useFilterPresets<TDraft extends Draft = Draft>(
@@ -116,7 +127,7 @@ export function useFilterPresets<TDraft extends Draft = Draft>(
 ): UseFilterPresetsResult<TDraft> {
   const filter = useFilter(options);
   const pluginKey = options?.pluginKey ?? DEFAULT_PRESET_KEY;
-  const state = filter.getPluginState<PresetPluginState<TDraft>>(pluginKey);
+  const state = getPluginState<TDraft>(filter, pluginKey);
 
   if (!state) {
     throw new FilterError(ERROR_CODES.PLUGIN_NOT_FOUND, 'Preset plugin is not installed');

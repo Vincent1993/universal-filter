@@ -1,7 +1,6 @@
-import type { Draft, FilterApi, FilterOptions, Plugin } from './types';
+import type { Draft, FilterApi, FilterOptions, PluginFactory } from './types';
 import EventEmitter from 'eventemitter3';
 import { CoreManager, PluginManager } from './managers';
-import { mergePlugins } from './lifecycle';
 import { getGlobalConfigure } from '../context';
 
 /**
@@ -17,15 +16,11 @@ export class FilterController<TDraft extends Draft> extends CoreManager<TDraft> 
   readonly plugin: PluginManager<TDraft>;
 
   constructor(optionsConfig: FilterOptions<TDraft> = {}) {
-    // 1. 合并插件配置(全局 + 实例)
+    // 1. 获取全局配置和插件
     const configure = getGlobalConfigure<TDraft>();
-    const defaults = configure.defaults ?? {};
+    const globalPlugins = (configure.defaults?.plugins ?? []) as PluginFactory<TDraft>[];
+    const instancePlugins = (optionsConfig.plugins ?? []) as PluginFactory<TDraft>[];
     const strategy = configure.mergeStrategy?.plugins ?? 'append';
-    const mergedPlugins = mergePlugins(
-      (defaults.plugins ?? []) as Plugin<TDraft>[],
-      (optionsConfig.plugins ?? []) as Plugin<TDraft>[],
-      strategy
-    );
 
     // 2. 创建 CoreManager (传入 emitFn)
     super({
@@ -33,8 +28,14 @@ export class FilterController<TDraft extends Draft> extends CoreManager<TDraft> 
       emitFn: (event, payload) => this._bus.emit(event, payload),
     });
 
-    // 3. 实例化 PluginManager (传入 bus 和插件列表)
-    this.plugin = new PluginManager(this._bus, mergedPlugins);
+    // 3. 实例化 PluginManager (传入插件和策略，自动合并和初始化)
+    this.plugin = new PluginManager(
+      this._bus,
+      instancePlugins,
+      globalPlugins,
+      strategy,
+      this as FilterApi<TDraft>
+    );
 
     // 4. 初始化 CoreManager effects (现在 _bus 已就绪)
     this.init();
@@ -42,16 +43,15 @@ export class FilterController<TDraft extends Draft> extends CoreManager<TDraft> 
     // 5. 调用用户的 onInit 监听器
     this.listeners?.onInit?.({ root: this });
 
-    // 6. 启动插件初始化
-    void this.plugin.runInit(this as FilterApi<TDraft>);
+    // 注意：插件初始化已在 PluginManager 构造函数中自动启动
 
-    // 7. autoApply 逻辑
+    // 6. autoApply 逻辑
     if (optionsConfig.autoApply?.onInit) {
       this._bus.once('plugins:ready', ({ ready }) => {
         if (ready) queueMicrotask(() => void this.apply());
       });
     }
-    // 8. autoApply 逻辑
+    // 7. autoApply 逻辑
     if (optionsConfig.autoApply?.onChange) {
       this._bus.on('draft:change', () => queueMicrotask(() => void this.apply()));
     }

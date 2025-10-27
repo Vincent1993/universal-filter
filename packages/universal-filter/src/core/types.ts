@@ -154,14 +154,6 @@ export interface PluginInitContext<TDraft extends Draft = Draft> {
 export interface Plugin<TDraft extends Draft = Draft> {
   name: string;
   /**
-   * 可选的依赖声明：该插件依赖的其他插件名称
-   */
-  requires?: string[];
-  /**
-   * 执行优先级：数值越小越先执行，越大越后执行（后执行者覆盖能力更强）
-   */
-  priority?: number;
-  /**
    * 插件初始化，仅与插件自身相关。数据读写应通过 ctx.root 完成。
    */
   onInit?(ctx: PluginInitContext<TDraft>): void | Promise<void>;
@@ -170,6 +162,23 @@ export interface Plugin<TDraft extends Draft = Draft> {
    */
   onDestroy?(): void;
 }
+
+/**
+ * 插件工厂函数辅助工具
+ */
+export interface PluginFactoryHelpers<TDraft extends Draft = Draft> {
+  root: FilterApi<TDraft>;
+  push: (plugin: Plugin<TDraft>) => void;  // 添加插件到末尾
+  shift: (plugin: Plugin<TDraft>) => void;  // 添加插件到开头
+  remove: (pluginName: string) => void;  // 移除指定插件
+}
+
+/**
+ * 插件工厂类型：可以是插件对象或工厂函数
+ */
+export type PluginFactory<TDraft extends Draft = Draft> =
+  | Plugin<TDraft>
+  | ((helpers: PluginFactoryHelpers<TDraft>) => Plugin<TDraft> | void)
 
 export interface FilterListeners<TDraft extends Draft = Draft> {
   onInit?(ctx: { root: FilterApi<TDraft> }): void;
@@ -194,7 +203,7 @@ export interface FilterOptions<TDraft extends Draft = Draft> {
   external?: JsonRecord;
   sections?: SectionConfig[];
   listeners?: FilterListeners<TDraft>;
-  plugins?: Plugin<TDraft>[];
+  plugins?: PluginFactory<TDraft>[];
   transform?: (input: TDraft, ctx: TransformContext<TDraft>) => unknown;
   pipeline?: DataPipeline<TDraft>;
   strict?: boolean;
@@ -264,7 +273,7 @@ export interface FilterApi<TDraft extends Draft = Draft> extends CoreManager<TDr
 }
 
 export interface GlobalDefaults<TDraft extends Draft = Draft> {
-  plugins?: Plugin<TDraft>[];
+  plugins?: PluginFactory<TDraft>[];
   listeners?: FilterListeners<TDraft>;
   transform?: (input: TDraft, ctx: TransformContext<TDraft>) => unknown;
   applyDebounceMs?: number;
