@@ -3,7 +3,7 @@ import { JsonTreeView } from '@ark-ui/react/json-tree-view';
 import { ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Observer} from '@formily/react'
+import { Observer } from '@formily/react'
 
 import './filter-state-view.css';
 
@@ -17,14 +17,15 @@ export function FilterStateViewer({
   defaultExpandedDepth = 2,
 }: FilterStateViewerProps) {
   const filter = useFilter();
+
   return (
     <Observer>
     {() => <Card>
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <span>{title}</span>
-          <Badge variant={filter.getState().modified ? 'default' : 'secondary'}>
-            {filter.getState().modified ? '已变更' : '未变更'}
+          <Badge variant={filter.changed ? 'default' : 'secondary'}>
+            {filter.changed ? '已变更' : '未变更'}
           </Badge>
         </CardTitle>
       </CardHeader>
@@ -36,7 +37,7 @@ export function FilterStateViewer({
           <div className="rounded-lg border bg-muted/30 p-1">
             <JsonTreeView.Root
               key="filter-draft"
-              data={filter.getDraft()}
+              data={filter.draft}
               defaultExpandedDepth={2}
             >
               <JsonTreeView.Tree arrow={<ChevronRight className="h-4 w-4" />} />
@@ -50,7 +51,22 @@ export function FilterStateViewer({
           <div className="rounded-lg border bg-muted/30 p-1">
             <JsonTreeView.Root
               key="filter-applied"
-              data={filter.getApplied()}
+              data={filter.applied}
+              defaultExpandedDepth={2}
+            >
+              <JsonTreeView.Tree arrow={<ChevronRight className="h-4 w-4" />} />
+            </JsonTreeView.Root>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-foreground">
+            初始化状态 (initialized)
+          </h3>
+          <div className="rounded-lg border bg-muted/30 p-1">
+            <JsonTreeView.Root
+              key="filter-initialized"
+              data={filter.initialValues}
               defaultExpandedDepth={2}
             >
               <JsonTreeView.Tree arrow={<ChevronRight className="h-4 w-4" />} />
@@ -64,7 +80,7 @@ export function FilterStateViewer({
             完整 Filter 实例 (展开查看)
           </summary>
           <div className="mt-2 rounded-lg border bg-muted/30 p-1">
-            <JsonTreeView.Root data={filter.getState()} defaultExpandedDepth={1}>
+            <JsonTreeView.Root data={filter.state} defaultExpandedDepth={1}>
               <JsonTreeView.Tree arrow={<ChevronRight className="h-4 w-4" />} />
             </JsonTreeView.Root>
           </div>

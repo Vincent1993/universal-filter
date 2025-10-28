@@ -1,38 +1,12 @@
-import { useContext, useSyncExternalStore } from 'react';
+import { useContext, useMemo } from 'react';
 import { ERROR_CODES, FilterError } from '../core/errors';
 import { useConfigure, DEFAULT_NAMESPACE, FilterContext } from '../context';
 import type { Draft, FilterApi, UseFilterInput } from '../core/types';
 
-// 为每个 filter 实例维护订阅状态
-const instanceStores = new WeakMap<
-  FilterApi<any>,
-  {
-    version: number;
-    listeners: Set<() => void>;
-    subscriptionId: number | null;
-  }
->();
-
-function getOrCreateStore<TDraft extends Draft>(instance: FilterApi<TDraft>) {
-  if (!instanceStores.has(instance)) {
-    const store = {
-      version: 0,
-      listeners: new Set<() => void>(),
-      subscriptionId: null as number | null,
-    };
-
-    // 只在第一次创建时订阅
-    store.subscriptionId = instance.form.subscribe(() => {
-      store.version++;
-      // 通知所有监听器
-      store.listeners.forEach((listener) => listener());
-    });
-
-    instanceStores.set(instance, store);
-  }
-  return instanceStores.get(instance)!;
-}
-
+/**
+ * 获取 FilterApi 实例
+ * 优先级: input.instance > context[namespace] > registry[namespace] > context[default] > registry[default]
+ */
 function useFilterInstance<TDraft extends Draft>(
   input?: UseFilterInput<TDraft>
 ): FilterApi<TDraft> {
@@ -81,28 +55,55 @@ function useFilterInstance<TDraft extends Draft>(
   );
 }
 
+/**
+ * useFilter Hook
+ *
+ * 返回 FilterApi 实例。该实例基于 Formily 的响应式系统构建。
+ *
+ * **重要提示**：为了实现精确的响应式更新，建议配合 `@formily/react` 的 `Observer` 组件使用。
+ *
+ * @example
+ * ```tsx
+ * import { Observer } from '@formily/react';
+ *
+ * function MyComponent() {
+ *   const filter = useFilter();
+ *
+ *   return (
+ *     <div>
+ *       <Observer>
+ *         {() => (
+ *           // 只有 draft.keyword 变化时这部分才会重新渲染
+ *           <input value={filter.draft.keyword} />
+ *         )}
+ *       </Observer>
+ *
+ *       <Observer>
+ *         {() => (
+ *           // 只有 changed 状态变化时这部分才会重新渲染
+ *           <Badge>{filter.changed ? '已变更' : '未变更'}</Badge>
+ *         )}
+ *       </Observer>
+ *     </div>
+ *   );
+ * }
+ * ```
+ *
+ * @example
+ * ```tsx
+ * // 使用指定 namespace
+ * const filter = useFilter({ namespace: 'myFilter' });
+ *
+ * // 使用直接传入的实例
+ * const filter = useFilter({ instance: myFilterInstance });
+ * ```
+ */
 export function useFilter<TDraft extends Draft>(
   input?: UseFilterInput<TDraft>
 ): FilterApi<TDraft> {
   const instance = useFilterInstance<TDraft>(input);
-  const store = getOrCreateStore(instance);
 
-  // 使用 useSyncExternalStore 订阅版本变化
-  useSyncExternalStore(
-    (onStoreChange) => {
-      // 添加监听器
-      store.listeners.add(onStoreChange);
-
-      // 返回清理函数
-      return () => {
-        store.listeners.delete(onStoreChange);
-      };
-    },
-    // getSnapshot: 返回当前版本号
-    () => store.version,
-    // getServerSnapshot: SSR 场景
-    () => store.version
-  );
-
-  return instance;
+  // 使用 useMemo 确保实例引用稳定
+  // FilterApi 实例是稳定的，不应该因为组件重新渲染而改变
+  return useMemo(() => instance, [instance]);
 }

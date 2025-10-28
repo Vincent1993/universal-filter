@@ -104,7 +104,6 @@ const FilterControls = () => {
     }
   };
   const handleReset = () => {
-    console.log(filter.getForm().getInitialValuesIn('*'), filter.getDefaultValues())
     filter.reset();
   };
 
@@ -112,8 +111,6 @@ const FilterControls = () => {
     filter.form.clearFormGraph('*');
     setFilterSchema(JSON.parse(value))
   }, [filterSchema]);
-
-  console.log(filter.getDraft())
 
   return (
     <Card>

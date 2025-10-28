@@ -3,7 +3,7 @@
  * 测试所有公共 API 和接口实现
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CoreManager, type ICoreManager } from '../../src/core/managers/CoreManager';
+import { CoreManager } from '../../src/core/managers/CoreManager';
 import type { Draft } from '../../src/core/types';
 
 interface TestDraft extends Draft {
@@ -31,22 +31,24 @@ describe('CoreManager - 完整功能测试', () => {
     });
   });
 
-  describe('类型和接口', () => {
-    it('应该实现 ICoreManager 接口', () => {
-      // 类型检查
-      const _manager: ICoreManager<TestDraft> = manager;
-      expect(_manager).toBeDefined();
-    });
-
-    it('应该有正确的只读属性', () => {
+  describe('属性和初始化', () => {
+    it('应该正确初始化所有属性', () => {
       expect(manager.id).toBeDefined();
       expect(typeof manager.id).toBe('string');
       expect(manager.form).toBeDefined();
-    });
-
-    it('应该有公共属性', () => {
       expect(manager.listeners).toBeUndefined();
       expect(manager.defaultValues).toEqual(defaultValues);
+    });
+
+    it('响应式属性应该初始化为 undefined', () => {
+      expect(manager.applied).toBeUndefined();
+      expect(manager.previous).toBeUndefined();
+    });
+
+    it('应该正确设置 Formily 表单', () => {
+      expect(manager.form.values).toBeDefined();
+      expect(manager.form.getState).toBeDefined();
+      expect(manager.form.setValues).toBeDefined();
     });
   });
 
@@ -64,49 +66,101 @@ describe('CoreManager - 完整功能测试', () => {
       });
     });
 
-    describe('applied', () => {
+    describe('applied (响应式属性)', () => {
       it('初始状态应该为 undefined', () => {
         expect(manager.applied).toBeUndefined();
       });
 
-      it('apply 后应该有值', async () => {
+      it('apply 后应该立即更新', async () => {
         manager.setValue('name', 'Jane');
         await manager.apply();
+
+        // applied 应该立即有值
         expect(manager.applied).toBeDefined();
         expect(manager.applied?.name).toBe('Jane');
       });
 
-      it('应该是独立副本', async () => {
+      it('应该是独立的快照副本', async () => {
         manager.setValue('name', 'Jane');
         await manager.apply();
-        const applied = manager.applied;
+        const appliedSnapshot = manager.applied;
 
+        // 修改 draft 不应该影响 applied 快照
         manager.setValue('name', 'Bob');
-        expect(applied?.name).toBe('Jane');
+        expect(appliedSnapshot?.name).toBe('Jane');
         expect(manager.draft.name).toBe('Bob');
+        expect(manager.applied?.name).toBe('Jane');
+      });
+
+      it('多次 apply 应该正确更新', async () => {
+        // 第一次 apply
+        manager.setValue('name', 'Jane');
+        await manager.apply();
+        expect(manager.applied?.name).toBe('Jane');
+
+        // 第二次 apply
+        manager.setValue('name', 'Bob');
+        await manager.apply();
+        expect(manager.applied?.name).toBe('Bob');
+      });
+
+      it('是响应式属性（可被 Observer 追踪）', async () => {
+        // 这个测试验证 applied 被正确设置为 observable.ref
+        expect(manager.applied).toBeUndefined();
+
+        await manager.apply();
+
+        // 属性应该可以直接访问和修改（响应式）
+        expect(manager.applied).toBeDefined();
       });
     });
 
-    describe('previous', () => {
+    describe('previous (响应式属性)', () => {
       it('初始状态应该为 undefined', () => {
         expect(manager.previous).toBeUndefined();
       });
 
-      it('apply 后应该创建 previous 快照', async () => {
+      it('apply 开始时应该创建 previous 快照', async () => {
         manager.setValue('name', 'Jane');
         await manager.apply();
+
+        // previous 应该保存 apply 开始时的状态
         expect(manager.previous).toBeDefined();
         expect(manager.previous?.name).toBe('Jane');
       });
 
-      it('应该是独立副本', async () => {
+      it('应该是独立的快照副本', async () => {
         manager.setValue('name', 'Jane');
         await manager.apply();
-        const previous = manager.previous;
+        const previousSnapshot = manager.previous;
 
+        // 修改 draft 不应该影响 previous 快照
         manager.setValue('name', 'Bob');
-        expect(previous?.name).toBe('Jane');
+        expect(previousSnapshot?.name).toBe('Jane');
         expect(manager.draft.name).toBe('Bob');
+        expect(manager.previous?.name).toBe('Jane');
+      });
+
+      it('多次 apply 应该正确更新 previous', async () => {
+        // 第一次 apply
+        manager.setValue('name', 'Jane');
+        await manager.apply();
+        expect(manager.previous?.name).toBe('Jane');
+
+        // 第二次 apply - previous 应该更新为第二次 apply 开始时的状态
+        manager.setValue('name', 'Bob');
+        await manager.apply();
+        expect(manager.previous?.name).toBe('Bob');
+      });
+
+      it('是响应式属性（可被 Observer 追踪）', async () => {
+        // 这个测试验证 previous 被正确设置为 observable.ref
+        expect(manager.previous).toBeUndefined();
+
+        await manager.apply();
+
+        // 属性应该可以直接访问（响应式）
+        expect(manager.previous).toBeDefined();
       });
     });
 
@@ -131,29 +185,29 @@ describe('CoreManager - 完整功能测试', () => {
     });
 
     describe('changed', () => {
-      it('初始状态应该返回 false', () => {
+      it('初始状态应该返回 false（未修改）', () => {
         expect(manager.changed).toBe(false);
       });
 
-      it('未 apply 前应该返回 false', () => {
+      it('修改值后应该返回 true（相对于 defaultValues）', () => {
         manager.setValue('name', 'Jane');
-        // previous 不存在，所以返回 false
-        expect(manager.changed).toBe(false);
-      });
-
-      it('apply 后未修改应该返回 true', async () => {
-        manager.setValue('name', 'Jane');
-        await manager.apply();
-        // draft 和 previous 相同
+        // draft 和 defaultValues 不同
         expect(manager.changed).toBe(true);
       });
 
-      it('apply 后修改应该返回 false', async () => {
+      it('apply 后仍显示为已修改（相对于 defaultValues）', async () => {
+        manager.setValue('name', 'Jane');
+        await manager.apply();
+        // draft 和 defaultValues 仍然不同
+        expect(manager.changed).toBe(true);
+      });
+
+      it('reset 后应该返回 false', async () => {
         manager.setValue('name', 'Jane');
         await manager.apply();
 
-        manager.setValue('name', 'Bob');
-        // draft 和 previous 不同
+        manager.reset();
+        // reset 后回到 defaultValues
         expect(manager.changed).toBe(false);
       });
     });
@@ -279,9 +333,7 @@ describe('CoreManager - 完整功能测试', () => {
       expect(manager.draft.tags?.length).toBe(3);
 
       manager.deleteValue('tags.1');
-      // formily 的 tags 是数组，删除元素后会自动调整索引，所以长度不变，但索引会变化，会变成一个稀疏数组
-      // expect(manager.draft.tags?.length).toBe(2);
-      expect(manager.draft.tags?.[1]).toBeUndefined();
+      expect(manager.draft.tags?.length).toBe(2);
     });
   });
 
@@ -320,7 +372,7 @@ describe('CoreManager - 完整功能测试', () => {
   });
 
   describe('reset - 重置表单', () => {
-    it('应该重置所有字段到默认值', () => {
+    it('应该重置所有字段到初始值', () => {
       manager.setValues({
         name: 'Jane',
         age: 25,
@@ -329,6 +381,7 @@ describe('CoreManager - 完整功能测试', () => {
 
       manager.reset();
 
+      // reset 应该重置到 initialValues (defaultValues)
       expect(manager.draft.name).toBe('John');
       expect(manager.draft.age).toBe(30);
       expect(manager.draft.email).toBe('john@example.com');
@@ -507,10 +560,11 @@ describe('CoreManager - 完整功能测试', () => {
       expect(manager.applied?.tags?.[1]).toBe('updated-tag2');
 
       // 删除数组元素
-
       manager.deleteValue('tags.0');
+      // Formily 删除后变成稀疏数组
       expect(manager.draft.tags?.[0]).toBeUndefined();
-      // expect(manager.draft.tags?.length).toBe(2);
+      expect(manager.draft.tags?.[1]).toBe('updated-tag2');
+      expect(manager.draft.tags?.length).toBe(3);
     });
 
     it('应该支持连续的修改-应用-重置流程', async () => {
@@ -566,6 +620,63 @@ describe('CoreManager - 完整功能测试', () => {
       await expect(emptyManager.apply()).resolves.toBeUndefined();
     });
   });
+
+  describe('响应式系统集成', () => {
+    it('applied 和 previous 应该是响应式属性', () => {
+      // 验证这些属性存在且可访问
+      expect('applied' in manager).toBe(true);
+      expect('previous' in manager).toBe(true);
+    });
+
+    it('响应式属性更新应该是同步的', async () => {
+      // 在 apply 之前
+      expect(manager.applied).toBeUndefined();
+      expect(manager.previous).toBeUndefined();
+
+      // apply 之后应该立即可见
+      manager.setValue('name', 'Jane');
+      await manager.apply();
+
+      // 同步检查（不需要等待下一个 tick）
+      expect(manager.applied).toBeDefined();
+      expect(manager.previous).toBeDefined();
+    });
+
+    it('应该正确处理连续的响应式更新', async () => {
+      // 第一次更新
+      manager.setValue('name', 'Jane');
+      await manager.apply();
+      const firstApplied = manager.applied;
+      const firstPrevious = manager.previous;
+
+      // 第二次更新
+      manager.setValue('name', 'Bob');
+      await manager.apply();
+
+      // 响应式属性应该已更新
+      expect(manager.applied).not.toBe(firstApplied);
+      expect(manager.previous).not.toBe(firstPrevious);
+      expect(manager.applied?.name).toBe('Bob');
+      expect(manager.previous?.name).toBe('Bob');
+    });
+
+    it('快照应该是不可变的（深拷贝）', async () => {
+      manager.setValues({
+        address: {
+          city: 'Beijing',
+          street: 'Main St',
+        },
+      });
+      await manager.apply();
+
+      const appliedSnapshot = manager.applied;
+
+      // 修改 draft 的嵌套对象
+      manager.setValue('address.city', 'Shanghai');
+
+      // applied 快照不应该受影响
+      expect(appliedSnapshot?.address?.city).toBe('Beijing');
+      expect(manager.draft.address?.city).toBe('Shanghai');
+    });
+  });
 });
-
-

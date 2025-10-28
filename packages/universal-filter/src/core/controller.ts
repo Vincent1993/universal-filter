@@ -37,9 +37,6 @@ export class FilterController<TDraft extends Draft> extends CoreManager<TDraft> 
       this as FilterApi<TDraft>
     );
 
-    // 4. 初始化 CoreManager effects (现在 _bus 已就绪)
-    this.init();
-
     // 5. 调用用户的 onInit 监听器
     this.listeners?.onInit?.({ root: this });
 
