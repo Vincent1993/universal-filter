@@ -405,6 +405,13 @@ describe('CoreManager - 完整功能测试', () => {
       managerWithListener.reset();
       expect(onReset).toHaveBeenCalledWith({ scope: 'all' });
     });
+
+    it('应该把所有的配置重置为空', () => {
+       manager.setValue('name', 'Jane');
+       manager.reset({ forceClear: true});
+
+      expect(manager.draft).toBeUndefined()
+    })
   });
 
   describe('clearErrors - 清除错误', () => {

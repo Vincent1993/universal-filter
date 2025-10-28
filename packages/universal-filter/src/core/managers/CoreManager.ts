@@ -3,6 +3,7 @@ import type {
   IFormMergeStrategy,
   IFormState,
   Form,
+  IFieldResetOptions,
 } from '@formily/core';
 import {
   createForm,
@@ -32,7 +33,6 @@ interface CoreOptions<TDraft extends Draft> extends FilterOptions<TDraft> {
  * @template TDraft - 草稿数据类型
  */
 export class CoreManager<TDraft extends Draft> {
-
   /** Formily 表单实例 */
   form!: Form;
 
@@ -239,10 +239,21 @@ export class CoreManager<TDraft extends Draft> {
   };
 
   /**
-   * 重置所有字段到默认值
+   * @name 重置所有表单项
+   * @param options - 重置选项
+   * @param pattern - 需要被清理的表单的路径，默认为全部
+   * @param options.forceClear - true 时，会清除所有字段值，false 时，重置到初始化值
+   * @param options.validate - 是否触发校验
+   * @see https://core.formilyjs.org/zh-CN/api/models/field/#ifieldresetoptions
+   * @description 如果需要对单个或者多个字段进行重置操作，用 this.form.reset 方法进行自定义
    */
-  reset = (): void => {
-    this.form.reset('*', { forceClear: false, validate: false });
+  reset = (options?: IFieldResetOptions, ): void => {
+    this.form.reset('*', {
+      forceClear: options?.forceClear ?? false,
+      validate: options?.validate ?? false,
+    });
+    //@TODO 这里需要优化，发现 draft 时 没有正确的应用响应式的数据，所以在设置的时候 先进行手动的赋值操作
+    this.form.setValues(options?.forceClear ? undefined : this.defaultValues);
     this.listeners?.onReset?.({ scope: 'all' });
     this.emitFn?.('reset', { scope: 'all' });
   };
