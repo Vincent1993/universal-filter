@@ -1,12 +1,11 @@
-import React, { createContext, useContext, useEffect, useMemo, type ReactElement } from 'react';
+import React, { createContext, useContext, useMemo, type ReactElement } from 'react';
 import { FormProvider, ExpressionScope } from '@formily/react';
-import { createInstanceRegistry } from '../core/registry';
+import { FilterErrorBoundary } from './ErrorBoundary';
 import type {
   FilterApi,
   FilterProviderProps,
   FilterConfigureProps,
   GlobalDefaults,
-  InstanceRegistry,
   Draft
 } from '../core/types';
 
@@ -21,12 +20,10 @@ export const DEFAULT_NAMESPACE = '__default__';
 export type FilterContextMap = Map<string, FilterApi<any>>;
 
 /**
- * 内部配置值 - 包含全局配置和内部管理的 registry
- * @internal
+ * 配置值 - 只包含全局配置，不包含 registry
  */
-interface InternalConfigureValue<TDraft> {
+interface ConfigureValue<TDraft extends Draft> {
   defaults: GlobalDefaults<TDraft>;
-  registry: InstanceRegistry<TDraft>;
   mergeStrategy: {
     plugins: 'prepend' | 'append';
     listeners: 'shallow' | 'deep';
@@ -41,10 +38,8 @@ interface InternalConfigureValue<TDraft> {
 export const FilterContext = createContext<FilterContextMap | null>(null);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const DEFAULT_CONFIGURE: InternalConfigureValue<any> = {
+const DEFAULT_CONFIGURE: ConfigureValue<any> = {
   defaults: {},
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  registry: createInstanceRegistry<any>(),
   mergeStrategy: {
     plugins: 'append',
     listeners: 'shallow',
@@ -52,24 +47,25 @@ const DEFAULT_CONFIGURE: InternalConfigureValue<any> = {
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ConfigureContext = createContext<InternalConfigureValue<any>>(DEFAULT_CONFIGURE);
+const ConfigureContext = createContext<ConfigureValue<any>>(DEFAULT_CONFIGURE);
 
 // ==================== FilterConfigure Component ====================
 /**
  * FilterConfigure - 全局配置组件
- * 提供全局默认配置和合并策略，registry 由组件内部管理
+ *
+ * 提供全局默认配置和合并策略
+ * 注意：registry 是全局单例，不通过此组件传递
  */
 export function FilterConfigure<TDraft extends Draft = Draft>(
   props: FilterConfigureProps<TDraft>
 ): ReactElement {
   const { value, children } = props;
 
-  const contextValue = useMemo<InternalConfigureValue<TDraft>>(() => {
+  const contextValue = useMemo<ConfigureValue<TDraft>>(() => {
     const defaults: GlobalDefaults<TDraft> = value?.defaults ?? ({} as GlobalDefaults<TDraft>);
 
     return {
       defaults,
-      registry: createInstanceRegistry<TDraft>(),
       mergeStrategy: {
         plugins: value?.mergeStrategy?.plugins ?? DEFAULT_CONFIGURE.mergeStrategy.plugins,
         listeners: value?.mergeStrategy?.listeners ?? DEFAULT_CONFIGURE.mergeStrategy.listeners,
@@ -83,11 +79,25 @@ export function FilterConfigure<TDraft extends Draft = Draft>(
 // ==================== FilterProvider Component ====================
 /**
  * FilterProvider - Filter 实例提供者
+ *
  * 负责将 Filter 实例注入到 React Context 和全局 Registry 中
+ * 内置 Error Boundary 防止渲染错误导致整个应用崩溃
+ *
+ * React 18 特性：
+ * - 使用 startTransition 优化错误重置
+ * - 支持 resetKeys 自动重置错误状态
+ * - 支持自定义重置钩子
+ *
+ * @param instance - Filter 实例
+ * @param namespace - 命名空间（可选）
+ * @param children - 子组件
+ * @param fallback - 自定义错误回退组件（可选）
+ * @param onError - 错误回调函数（可选）
+ * @param onReset - 自定义重置钩子（可选）
+ * @param resetKeys - 重置键数组（可选）
  */
 export function FilterProvider<TDraft extends Draft = Draft>(props: FilterProviderProps<TDraft>): ReactElement {
-  const { instance, namespace, children } = props;
-  const configure = useConfigure<TDraft>();
+  const { instance, namespace, children, fallback, onError, onReset, resetKeys } = props;
   const parentMap = useContext(FilterContext);
 
   // 构建 Context Map
@@ -98,40 +108,47 @@ export function FilterProvider<TDraft extends Draft = Draft>(props: FilterProvid
     return next;
   }, [instance, namespace, parentMap]);
 
-  // 注册到全局 Registry
-  useEffect(() => {
-    if (namespace) {
-      configure.registry.set(namespace, instance as FilterApi<TDraft>);
-      return () => configure.registry.delete(namespace);
-    }
-    configure.registry.setDefault(instance as FilterApi<TDraft>);
-    return undefined;
-  }, [configure.registry, instance, namespace]);
-
+  // FormProvider 在最外层，确保 form 上下文优先级最高
+  // FilterContext 在中间层，提供 filter 实例映射
+  // ExpressionScope 在最内层，提供表达式作用域（包含 $root 和 $form 引用）
+  // ErrorBoundary 包裹所有内容，捕获渲染错误
   return (
-    <FormProvider form={instance.form}>
-      <ExpressionScope value={{ $root: instance }}>
-        <FilterContext.Provider value={contextMap}>{children}</FilterContext.Provider>
-      </ExpressionScope>
-    </FormProvider>
+    <FilterErrorBoundary
+      fallback={fallback}
+      onError={onError}
+      onReset={onReset}
+      resetKeys={resetKeys}
+    >
+      <FormProvider form={instance.form}>
+        <FilterContext.Provider value={contextMap}>
+          <ExpressionScope value={{ $root: instance, $form: instance.form }}>
+            {children}
+          </ExpressionScope>
+        </FilterContext.Provider>
+      </FormProvider>
+    </FilterErrorBoundary>
   );
 }
 
 // ==================== Hooks ====================
 /**
  * useConfigure - 获取全局配置的 Hook
- * @returns 包含全局默认值、registry 和合并策略的配置对象
+ * @returns 包含全局默认值和合并策略的配置对象
  */
-export function useConfigure<TDraft>(): InternalConfigureValue<TDraft> {
-  return useContext(ConfigureContext) as InternalConfigureValue<TDraft>;
+export function useConfigure<TDraft extends Draft>(): ConfigureValue<TDraft> {
+  return useContext(ConfigureContext) as ConfigureValue<TDraft>;
 }
 
 /**
  * getGlobalConfigure - 获取全局配置（非 Hook 版本）
- * @returns 包含全局默认值、registry 和合并策略的配置对象
+ *
+ * 注意：不包含 registry，registry 是全局单例，
+ * 使用 getGlobalRegistry() 直接访问
+ *
+ * @returns 包含全局默认值和合并策略的配置对象
  * @internal
  */
-export function getGlobalConfigure<TDraft>(): InternalConfigureValue<TDraft> {
-  const context = ConfigureContext as unknown as { _currentValue?: InternalConfigureValue<TDraft> };
-  return context._currentValue ?? (DEFAULT_CONFIGURE as InternalConfigureValue<TDraft>);
+export function getGlobalConfigure<TDraft extends Draft>(): ConfigureValue<TDraft> {
+  const context = ConfigureContext as unknown as { _currentValue?: ConfigureValue<TDraft> };
+  return context._currentValue ?? (DEFAULT_CONFIGURE as ConfigureValue<TDraft>);
 }

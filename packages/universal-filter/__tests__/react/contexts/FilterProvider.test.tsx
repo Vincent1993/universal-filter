@@ -1,176 +1,348 @@
 /**
- * FilterProvider 测试
- * 使用真实的 Formily 和 React
+ * FilterProvider 组件测试
+ *
+ * 测试范围：
+ * 1. Context 提供：FilterContext、FormProvider、ExpressionScope
+ * 2. 嵌套 Provider：多层嵌套、命名空间隔离
+ * 3. ErrorBoundary：错误捕获、自定义 fallback、React 18 特性
  */
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import React from 'react';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+
+import { render, screen, renderHookWithFilter, createTestFilter, createNestedWrapper } from '../../test-utils';
 import { FilterProvider } from '../../../src/context/Provider';
 import { useFilter } from '../../../src/hooks/useFilter';
-import { createFilter } from '../../../src/core/createFilter';
+import { useField } from '../../../src/hooks/useField';
+import type { FilterApi } from '../../../src/core/types';
 
-describe('FilterProvider 测试（真实 Formily）', () => {
-  it('应该提供 filter 实例给子组件', () => {
-    const filter = createFilter<{ name: string }>({
-      defaultValues: { name: 'John' },
-    });
+describe('FilterProvider', () => {
+  // ==================== 共享实例 ====================
+  let testFilter: FilterApi<{ value: string }>;
 
-    function TestComponent() {
-      const f = useFilter();
-      return <div data-testid="filter-id">{f.id}</div>;
-    }
-
-    render(
-      <FilterProvider instance={filter}>
-        <TestComponent />
-      </FilterProvider>
-    );
-
-    const element = screen.getByTestId('filter-id');
-    expect(element.textContent).toBe(filter.id);
+  beforeEach(() => {
+    testFilter = createTestFilter({ value: 'test' });
   });
 
-  it('应该能访问 draft 值', () => {
-    const filter = createFilter<{ name: string }>({
-      defaultValues: { name: 'John' },
+  // ==================== Context 提供测试 ====================
+
+  describe('Context 提供', () => {
+    it('应该通过 FilterContext 提供 filter 实例', () => {
+      function TestComponent() {
+        const filter = useFilter();
+        return <div data-testid="value">{filter.draft.value}</div>;
+      }
+
+      render(<TestComponent />, {
+        filterInstance: testFilter,
+      });
+
+      expect(screen.getByTestId('value')).toHaveTextContent('test');
     });
 
-    function TestComponent() {
-      const f = useFilter<{ name: string }>();
-      return <div data-testid="name">{f.draft.name}</div>;
-    }
+    it('应该支持命名空间实例', () => {
+      const nsFilter = createTestFilter({ value: 'ns-value' });
 
-    render(
-      <FilterProvider instance={filter}>
-        <TestComponent />
-      </FilterProvider>
-    );
+      function TestComponent() {
+        const filter = useFilter({ namespace: 'test-ns' });
+        return <div data-testid="value">{filter.draft.value}</div>;
+      }
 
-    expect(screen.getByTestId('name').textContent).toBe('John');
+      render(<TestComponent />, {
+        filterInstance: nsFilter,
+        filterNamespace: 'test-ns',
+      });
+
+      expect(screen.getByTestId('value')).toHaveTextContent('ns-value');
+    });
+
+    it('应该提供完整的 filter API', () => {
+      function TestComponent() {
+        const filter = useFilter();
+
+        return (
+          <div>
+            <div data-testid="has-apply">{typeof filter.apply === 'function' ? 'yes' : 'no'}</div>
+            <div data-testid="has-reset">{typeof filter.reset === 'function' ? 'yes' : 'no'}</div>
+            <div data-testid="has-form">{filter.form ? 'yes' : 'no'}</div>
+          </div>
+        );
+      }
+
+      render(<TestComponent />, {
+        filterInstance: testFilter,
+      });
+
+      expect(screen.getByTestId('has-apply')).toHaveTextContent('yes');
+      expect(screen.getByTestId('has-reset')).toHaveTextContent('yes');
+      expect(screen.getByTestId('has-form')).toHaveTextContent('yes');
+    });
   });
 
-  it('应该支持嵌套 Provider', () => {
-    const filter1 = createFilter<{ value: string }>({
-      defaultValues: { value: 'outer' },
+  // ==================== 嵌套 Provider 测试 ====================
+
+  describe('嵌套 Provider', () => {
+    it('应该支持嵌套，内层覆盖外层', () => {
+      const outer = createTestFilter({ value: 'outer' });
+      const inner = createTestFilter({ value: 'inner' });
+
+      function TestComponent() {
+        const filter = useFilter();
+        return <div data-testid="value">{filter.draft.value}</div>;
+      }
+
+      const wrapper = createNestedWrapper([
+        { instance: outer },
+        { instance: inner },
+      ]);
+
+      render(wrapper({ children: <TestComponent /> }));
+
+      // 应该获取最内层的实例
+      expect(screen.getByTestId('value')).toHaveTextContent('inner');
     });
 
-    const filter2 = createFilter<{ value: string }>({
-      defaultValues: { value: 'inner' },
+    it('应该支持命名空间隔离', () => {
+      const outer = createTestFilter({ value: 'outer' });
+      const inner = createTestFilter({ value: 'inner' });
+
+      function TestComponent() {
+        const outerFilter = useFilter({ namespace: 'outer' });
+        const innerFilter = useFilter({ namespace: 'inner' });
+
+        return (
+          <div>
+            <div data-testid="outer">{outerFilter.draft.value}</div>
+            <div data-testid="inner">{innerFilter.draft.value}</div>
+          </div>
+        );
+      }
+
+      const wrapper = createNestedWrapper([
+        { instance: outer, namespace: 'outer' },
+        { instance: inner, namespace: 'inner' },
+      ]);
+
+      render(wrapper({ children: <TestComponent /> }));
+
+      expect(screen.getByTestId('outer')).toHaveTextContent('outer');
+      expect(screen.getByTestId('inner')).toHaveTextContent('inner');
     });
 
-    function OuterComponent() {
-      const f = useFilter<{ value: string }>();
-      return <div data-testid="outer">{f.draft.value}</div>;
-    }
+    it('应该支持三层嵌套', () => {
+      const level1 = createTestFilter({ value: 'l1' });
+      const level2 = createTestFilter({ value: 'l2' });
+      const level3 = createTestFilter({ value: 'l3' });
 
-    function InnerComponent() {
-      const f = useFilter<{ value: string }>();
-      return <div data-testid="inner">{f.draft.value}</div>;
-    }
+      function TestComponent() {
+        const f1 = useFilter({ namespace: 'l1' });
+        const f2 = useFilter({ namespace: 'l2' });
+        const f3 = useFilter({ namespace: 'l3' });
 
-    render(
-      <FilterProvider instance={filter1}>
-        <OuterComponent />
-        <FilterProvider instance={filter2}>
-          <InnerComponent />
-        </FilterProvider>
-      </FilterProvider>
-    );
+        return (
+          <div>
+            <div data-testid="l1">{f1.draft.value}</div>
+            <div data-testid="l2">{f2.draft.value}</div>
+            <div data-testid="l3">{f3.draft.value}</div>
+          </div>
+        );
+      }
 
-    expect(screen.getByTestId('outer').textContent).toBe('outer');
-    expect(screen.getByTestId('inner').textContent).toBe('inner');
+      const wrapper = createNestedWrapper([
+        { instance: level1, namespace: 'l1' },
+        { instance: level2, namespace: 'l2' },
+        { instance: level3, namespace: 'l3' },
+      ]);
+
+      render(wrapper({ children: <TestComponent /> }));
+
+      expect(screen.getByTestId('l1')).toHaveTextContent('l1');
+      expect(screen.getByTestId('l2')).toHaveTextContent('l2');
+      expect(screen.getByTestId('l3')).toHaveTextContent('l3');
+    });
   });
 
-  it('应该支持更新 draft 值', () => {
-    const filter = createFilter<{ name: string }>({
-      defaultValues: { name: 'John' },
+  // ==================== ErrorBoundary 测试 ====================
+
+  describe('ErrorBoundary', () => {
+    it('应该捕获子组件渲染错误', () => {
+      // 抑制 console.error
+      const originalError = console.error;
+      console.error = vi.fn();
+
+      function ThrowError() {
+        throw new Error('测试错误');
+      }
+
+      function TestComponent() {
+        return <ThrowError />;
+      }
+
+      render(<TestComponent />, {
+        filterInstance: testFilter,
+      });
+
+      // 应该显示错误界面而不是崩溃
+      expect(screen.getByText(/发生错误|error/i)).toBeInTheDocument();
+
+      console.error = originalError;
     });
 
-    function TestComponent() {
-      const f = useFilter<{ name: string }>();
+    it('应该支持自定义 fallback', () => {
+      const originalError = console.error;
+      console.error = vi.fn();
 
-      return (
-        <div>
-          <div data-testid="name">{f.draft.name}</div>
-          <button
-            data-testid="update"
-            onClick={() => f.form.setValues({ name: 'Jane' })}
-          >
-            Update
-          </button>
-        </div>
+      function ThrowError() {
+        throw new Error('Custom Error');
+      }
+
+      const customFallback = () => (
+        <div data-testid="custom-error">自定义错误显示</div>
       );
-    }
 
-    const { getByTestId } = render(
-      <FilterProvider instance={filter}>
-        <TestComponent />
-      </FilterProvider>
-    );
+      render(
+        <FilterProvider instance={testFilter} fallback={customFallback}>
+          <ThrowError />
+        </FilterProvider>
+      );
 
-    // 初始值
-    expect(getByTestId('name').textContent).toBe('John');
+      expect(screen.getByTestId('custom-error')).toHaveTextContent('自定义错误显示');
 
-    // 点击更新（注意：实际更新可能需要等待 React 重渲染）
-    const button = getByTestId('update');
-    button.click();
-
-    // 验证 filter 状态已更新
-    expect(filter.draft.name).toBe('Jane');
-  });
-
-  it('应该在没有 Provider 时抛出错误', () => {
-    // 屏蔽控制台错误
-    const originalError = console.error;
-    console.error = () => {};
-
-    function TestComponent() {
-      useFilter();
-      return null;
-    }
-
-    expect(() => {
-      render(<TestComponent />);
-    }).toThrow();
-
-    console.error = originalError;
-  });
-
-  it('应该支持多个不同类型的 filter', () => {
-    const userFilter = createFilter<{ name: string }>({
-      defaultValues: { name: 'John' },
+      console.error = originalError;
     });
 
-    const productFilter = createFilter<{ category: string }>({
-      defaultValues: { category: 'Electronics' },
+    it('应该支持 onError 回调', () => {
+      const originalError = console.error;
+      console.error = vi.fn();
+
+      const onError = vi.fn();
+
+      function ThrowError() {
+        throw new Error('Error for callback');
+      }
+
+      render(
+        <FilterProvider instance={testFilter} onError={onError}>
+          <ThrowError />
+        </FilterProvider>
+      );
+
+      expect(onError).toHaveBeenCalled();
+      expect(onError).toHaveBeenCalledWith(
+        expect.any(Error),
+        expect.anything()
+      );
+
+      console.error = originalError;
     });
 
-    function UserComponent() {
-      const f = useFilter<{ name: string }>();
-      return <div data-testid="user">{f.draft.name}</div>;
-    }
+    it('应该支持 onReset 回调', () => {
+      const originalError = console.error;
+      console.error = vi.fn();
 
-    function ProductComponent() {
-      const f = useFilter<{ category: string }>();
-      return <div data-testid="product">{f.draft.category}</div>;
-    }
+      const onReset = vi.fn();
 
-    render(
-      <>
-        <FilterProvider instance={userFilter}>
-          <UserComponent />
-        </FilterProvider>
-        <FilterProvider instance={productFilter}>
-          <ProductComponent />
-        </FilterProvider>
-      </>
-    );
+      function ThrowError() {
+        throw new Error('Error for reset');
+      }
 
-    expect(screen.getByTestId('user').textContent).toBe('John');
-    expect(screen.getByTestId('product').textContent).toBe('Electronics');
+      function TestComponent() {
+        return <ThrowError />;
+      }
+
+      render(<TestComponent />, {
+        filterInstance: testFilter,
+        onReset,
+      });
+
+      // 点击重置按钮
+      const resetButton = screen.getByText(/重置|reset/i);
+      resetButton.click();
+
+      expect(onReset).toHaveBeenCalled();
+
+      console.error = originalError;
+    });
+
+    it('应该支持 resetKeys 自动重置', () => {
+      const originalError = console.error;
+      console.error = vi.fn();
+
+      let shouldThrow = true;
+
+      function ConditionalError() {
+        if (shouldThrow) {
+          throw new Error('Conditional Error');
+        }
+        return <div data-testid="recovered">已恢复</div>;
+      }
+
+      function TestComponent() {
+        return <ConditionalError />;
+      }
+
+      const { rerender } = render(<TestComponent />, {
+        filterInstance: testFilter,
+        resetKeys: [shouldThrow],
+      });
+
+      // 应该显示错误
+      expect(screen.getByText(/发生错误|error/i)).toBeInTheDocument();
+
+      // 修改条件，重新渲染
+      shouldThrow = false;
+      rerender(<TestComponent />);
+
+      // 应该自动恢复
+      expect(screen.getByTestId('recovered')).toHaveTextContent('已恢复');
+
+      console.error = originalError;
+    });
+  });
+
+  // ==================== 性能测试 ====================
+
+  describe('性能', () => {
+    it('应该避免不必要的重渲染', () => {
+      let renderCount = 0;
+
+      function TestComponent() {
+        renderCount++;
+        const filter = useFilter();
+        return <div data-testid="value">{filter.draft.value}</div>;
+      }
+
+      const { rerender } = render(<TestComponent />, {
+        filterInstance: testFilter,
+      });
+
+      const initialRenderCount = renderCount;
+
+      // 重新渲染 Provider（但 instance 不变）
+      rerender(<TestComponent />);
+
+      // 应该只增加一次渲染
+      expect(renderCount).toBe(initialRenderCount + 1);
+    });
+
+    it('应该在实例不变时保持 context 稳定', () => {
+      const instances: FilterApi<{ value: string }>[] = [];
+
+      function TestComponent() {
+        const filter = useFilter<{ value: string }>();
+        instances.push(filter);
+        return <div>{filter.draft.value}</div>;
+      }
+
+      const { rerender } = render(<TestComponent />, {
+        filterInstance: testFilter,
+      });
+
+      rerender(<TestComponent />);
+      rerender(<TestComponent />);
+
+      // 所有获取的实例应该相同
+      expect(instances[0]).toBe(instances[1]);
+      expect(instances[1]).toBe(instances[2]);
+    });
   });
 });
-
-
-
-

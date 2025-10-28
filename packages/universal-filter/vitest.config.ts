@@ -5,6 +5,7 @@ export default defineConfig({
     // 使用 jsdom 环境以支持 React 测试
     environment: 'jsdom',
     globals: true,
+    setupFiles: ['./__tests__/setup.ts'],
     includeSource: ['src/**/*.{ts,tsx}'],
     coverage: {
       provider: 'v8',

@@ -32,11 +32,9 @@ interface CoreOptions<TDraft extends Draft> extends FilterOptions<TDraft> {
  * @template TDraft - 草稿数据类型
  */
 export class CoreManager<TDraft extends Draft> {
-  /** 管理器的唯一标识符 */
-  id: string;
 
   /** Formily 表单实例 */
-  form: Form;
+  form!: Form;
 
   /** 事件监听器集合 */
   listeners: FilterListeners<TDraft> | undefined;
@@ -61,7 +59,6 @@ export class CoreManager<TDraft extends Draft> {
   constructor(optionsConfig: CoreOptions<TDraft> = {}) {
     this.initialize(optionsConfig);
     this.makeForm(optionsConfig);
-    this.id = this.form.id;
     this.makeObservable();
     this.setupApplyEffects();
   }

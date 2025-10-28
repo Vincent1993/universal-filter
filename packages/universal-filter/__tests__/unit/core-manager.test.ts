@@ -33,8 +33,6 @@ describe('CoreManager - 完整功能测试', () => {
 
   describe('属性和初始化', () => {
     it('应该正确初始化所有属性', () => {
-      expect(manager.id).toBeDefined();
-      expect(typeof manager.id).toBe('string');
       expect(manager.form).toBeDefined();
       expect(manager.listeners).toBeUndefined();
       expect(manager.defaultValues).toEqual(defaultValues);

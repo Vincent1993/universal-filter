@@ -1,12 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {  Button } from 'antd';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   ReloadOutlined,
   CheckCircleOutlined,
 } from '@ant-design/icons';
-import { createSchemaField } from '@formily/react';
+import { createSchemaField, useForm } from '@formily/react';
 import {
   FormItem,
   Input,
@@ -15,7 +15,7 @@ import {
   FormButtonGroup,
 } from '@formily/antd-v5';
 import { ISchema } from '@formily/json-schema';
-import { createFilter, FilterProvider, useFilter, createUrlSyncPlugin } from '@dfx/universal-filter';
+import { createFilter, FilterProvider, useFilter, createUrlSyncPlugin, useField } from '@dfx/universal-filter';
 import { FilterStateViewer } from '@/components/filter-state-viewer';
 import {  JsonEditor } from '@/components/json-config-editor';
 
@@ -26,6 +26,7 @@ type DemoDraft = {
   status?: string;
   [key: string]: unknown;
 };
+
 
 // 创建 Schema Field 组件
 const SchemaField = createSchemaField({
@@ -91,6 +92,12 @@ const json: ISchema = {
   },
 };
 
+const TextComponent = () => {
+  const field = useField('category')
+  console.log(field);
+
+  return <div>12</div>
+}
 const FilterControls = () => {
   const filter = useFilter<DemoDraft>();
   const [filterSchema, setFilterSchema] = useState(json);
@@ -120,7 +127,7 @@ const FilterControls = () => {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <SchemaField schema={filterSchema} key={JSON.stringify(filterSchema)}/>
+        <SchemaField schema={filterSchema} />
         <FormButtonGroup align="right">
           <Button onClick={handleReset} icon={<ReloadOutlined />}>
             重置
@@ -142,7 +149,9 @@ const FilterControls = () => {
           className="mt-4"
         />
       </CardContent>
+      <TextComponent />
     </Card>
+
   );
 };
 
@@ -186,7 +195,6 @@ function BasicPage() {
       }),
     []
   );
-
 
   return (
     <FilterProvider instance={filter}>

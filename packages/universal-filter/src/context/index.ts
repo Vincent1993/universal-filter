@@ -8,3 +8,5 @@ export {
 } from './Provider';
 
 export type { FilterContextMap } from './Provider';
+
+export { FilterErrorBoundary } from './ErrorBoundary';
