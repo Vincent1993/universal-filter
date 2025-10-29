@@ -78,20 +78,8 @@ export class FilterErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoun
     const { resetKeys } = this.props;
     const { hasError } = this.state;
 
-    if (hasError && resetKeys) {
-      const prevResetKeys = prevProps.resetKeys;
-
-      // 检查 resetKeys 是否发生变化
-      if (
-        prevResetKeys &&
-        resetKeys.length === prevResetKeys.length &&
-        resetKeys.some((key, index) => key !== prevResetKeys[index])
-      ) {
-        // 使用 startTransition 优化重置体验
-        startTransition(() => {
-          this.handleReset();
-        });
-      }
+    if (hasError && resetKeys && haveResetKeysChanged(prevProps.resetKeys, resetKeys)) {
+      this.handleReset();
     }
   }
 
@@ -111,18 +99,41 @@ export class FilterErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoun
     const { hasError, error, errorInfo } = this.state;
     const { children, fallback } = this.props;
 
-    if (hasError && error && errorInfo) {
+    if (hasError && error) {
+      const info = errorInfo ?? { componentStack: '' };
+
       // 如果提供了自定义 fallback，使用自定义的
       if (fallback) {
-        return fallback(error, errorInfo, this.handleReset);
+        return fallback(error, info, this.handleReset);
       }
 
       // 否则使用默认的错误展示
-      return <DefaultErrorFallback error={error} errorInfo={errorInfo} reset={this.handleReset} />;
+      return <DefaultErrorFallback error={error} errorInfo={info} reset={this.handleReset} />;
     }
 
     return children;
   }
+}
+
+function haveResetKeysChanged(
+  prevKeys: Array<string | number> | undefined,
+  nextKeys: Array<string | number>
+): boolean {
+  if (!prevKeys) {
+    return true;
+  }
+
+  if (prevKeys.length !== nextKeys.length) {
+    return true;
+  }
+
+  for (let i = 0; i < nextKeys.length; i++) {
+    if (Object.is(prevKeys[i], nextKeys[i]) === false) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -139,7 +150,7 @@ function DefaultErrorFallback({
   errorInfo: ErrorInfo;
   reset: () => void;
 }): ReactNode {
-  const isDevelopment = process.env.NODE_ENV === 'development';
+  const isDevelopment = process.env.NODE_ENV !== 'production';
 
   // React 18: 使用 startTransition 包装重置操作，提升用户体验
   const handleReset = () => {
@@ -165,7 +176,7 @@ function DefaultErrorFallback({
         style={{ margin: '0 0 10px 0', color: '#ff4d4f' }}
         id="error-title"
       >
-        ⚠️ {isDevelopment ? 'Filter 渲染错误' : '渲染发生错误'}
+        ⚠️ {isDevelopment ? 'Filter 渲染发生错误' : '渲染发生错误'}
       </h3>
 
       {isDevelopment ? (

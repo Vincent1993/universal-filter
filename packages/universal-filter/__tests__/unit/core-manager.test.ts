@@ -406,12 +406,12 @@ describe('CoreManager - 完整功能测试', () => {
       expect(onReset).toHaveBeenCalledWith({ scope: 'all' });
     });
 
-    it('应该把所有的配置重置为空', () => {
-       manager.setValue('name', 'Jane');
-       manager.reset({ forceClear: true});
+    it('forceClear 时应该重置为一个空对象', () => {
+      manager.setValue('name', 'Jane');
+      manager.reset({ forceClear: true });
 
-      expect(manager.draft).toBeUndefined()
-    })
+      expect(manager.draft).toEqual({});
+    });
   });
 
   describe('clearErrors - 清除错误', () => {
@@ -566,10 +566,8 @@ describe('CoreManager - 完整功能测试', () => {
 
       // 删除数组元素
       manager.deleteValue('tags.0');
-      // Formily 删除后变成稀疏数组
-      expect(manager.draft.tags?.[0]).toBeUndefined();
-      expect(manager.draft.tags?.[1]).toBe('updated-tag2');
-      expect(manager.draft.tags?.length).toBe(3);
+      // Formily 会重排数组索引
+      expect(manager.draft.tags).toEqual(['updated-tag2', 'tag3']);
     });
 
     it('应该支持连续的修改-应用-重置流程', async () => {

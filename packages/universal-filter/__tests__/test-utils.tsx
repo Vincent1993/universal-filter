@@ -5,7 +5,7 @@
  *
  * 提供自定义的 render 方法和辅助函数，简化测试代码
  */
-import React, { ReactElement } from 'react';
+import React, { ReactElement, type ReactNode } from 'react';
 import {
   render as rtlRender,
   renderHook as rtlRenderHook,
@@ -15,6 +15,7 @@ import {
 import { FilterProvider } from '../src/context/Provider';
 import { createFilter } from '../src/core/createFilter';
 import type { FilterApi, Draft } from '../src/core/types';
+import type { ErrorInfo } from 'react';
 
 // ==================== 类型定义 ====================
 
@@ -32,6 +33,10 @@ interface CustomRenderOptions<TDraft extends Draft = Draft> extends Omit<RenderO
    * 初始值（用于自动创建 filter）
    */
   defaultValues?: TDraft;
+  fallback?: (error: Error, errorInfo: ErrorInfo, reset: () => void) => ReactNode;
+  onError?: (error: Error, errorInfo: ErrorInfo) => void;
+  onReset?: () => void;
+  resetKeys?: Array<string | number>;
 }
 
 interface RenderHookWithFilterOptions<TDraft extends Draft = Draft> {
@@ -70,6 +75,10 @@ function customRender<TDraft extends Draft = Draft>(
     filterInstance,
     filterNamespace,
     defaultValues,
+    fallback,
+    onError,
+    onReset,
+    resetKeys,
     ...renderOptions
   } = options || {};
 
@@ -79,7 +88,14 @@ function customRender<TDraft extends Draft = Draft>(
   // 创建 AllTheProviders 组件
   function AllTheProviders({ children }: { children: React.ReactNode }) {
     return (
-      <FilterProvider instance={instance} namespace={filterNamespace}>
+      <FilterProvider
+        instance={instance}
+        namespace={filterNamespace}
+        fallback={fallback}
+        onError={onError}
+        onReset={onReset}
+        resetKeys={resetKeys}
+      >
         {children}
       </FilterProvider>
     );

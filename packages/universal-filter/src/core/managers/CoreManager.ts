@@ -247,13 +247,20 @@ export class CoreManager<TDraft extends Draft> {
    * @see https://core.formilyjs.org/zh-CN/api/models/field/#ifieldresetoptions
    * @description 如果需要对单个或者多个字段进行重置操作，用 this.form.reset 方法进行自定义
    */
-  reset = (options?: IFieldResetOptions, ): void => {
+  reset = (options?: IFieldResetOptions): void => {
     this.form.reset('*', {
       forceClear: options?.forceClear ?? false,
       validate: options?.validate ?? false,
     });
-    //@TODO 这里需要优化，发现 draft 时 没有正确的应用响应式的数据，所以在设置的时候 先进行手动的赋值操作
-    this.form.setValues(options?.forceClear ? undefined : this.defaultValues);
+
+    const shouldForceClear = options?.forceClear ?? false;
+    const nextValues = shouldForceClear
+      ? {}
+      : this.defaultValues
+        ? cloneDeep(this.defaultValues)
+        : {};
+
+    this.form.setValues(nextValues as Partial<TDraft>, 'overwrite');
     this.listeners?.onReset?.({ scope: 'all' });
     this.emitFn?.('reset', { scope: 'all' });
   };
