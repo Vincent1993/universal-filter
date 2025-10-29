@@ -1,0 +1,36 @@
+{
+  "name": "@dfx/dynamic-filter",
+  "version": "1.0.0",
+  "description": "Headless dynamic filter system based on Formily Schema Patch",
+  "main": "./src/index.ts",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "rslib build",
+    "dev": "rslib build --watch"
+  },
+  "keywords": [
+    "formily",
+    "filter",
+    "dynamic",
+    "headless",
+    "schema"
+  ],
+  "dependencies": {
+    "es-toolkit": "^1.28.0"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "@formily/core": "^2.3.0",
+    "@formily/react": "^2.3.0",
+    "@formily/json-schema": "^2.3.0",
+    "@dfx/universal-filter": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3"
+  }
+}
+
