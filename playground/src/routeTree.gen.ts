@@ -9,9 +9,15 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as DynamicFilterRouteImport } from './routes/dynamic-filter'
 import { Route as BasicRouteImport } from './routes/basic'
 import { Route as IndexRouteImport } from './routes/index'
 
+const DynamicFilterRoute = DynamicFilterRouteImport.update({
+  id: '/dynamic-filter',
+  path: '/dynamic-filter',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BasicRoute = BasicRouteImport.update({
   id: '/basic',
   path: '/basic',
@@ -26,31 +32,42 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/basic': typeof BasicRoute
+  '/dynamic-filter': typeof DynamicFilterRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/basic': typeof BasicRoute
+  '/dynamic-filter': typeof DynamicFilterRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/basic': typeof BasicRoute
+  '/dynamic-filter': typeof DynamicFilterRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/basic'
+  fullPaths: '/' | '/basic' | '/dynamic-filter'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/basic'
-  id: '__root__' | '/' | '/basic'
+  to: '/' | '/basic' | '/dynamic-filter'
+  id: '__root__' | '/' | '/basic' | '/dynamic-filter'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BasicRoute: typeof BasicRoute
+  DynamicFilterRoute: typeof DynamicFilterRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/dynamic-filter': {
+      id: '/dynamic-filter'
+      path: '/dynamic-filter'
+      fullPath: '/dynamic-filter'
+      preLoaderRoute: typeof DynamicFilterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/basic': {
       id: '/basic'
       path: '/basic'
@@ -71,6 +88,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BasicRoute: BasicRoute,
+  DynamicFilterRoute: DynamicFilterRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

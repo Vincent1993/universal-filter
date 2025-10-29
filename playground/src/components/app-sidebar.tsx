@@ -1,21 +1,10 @@
 import * as React from "react"
 import {
-  IconCamera,
-  IconChartBar,
-  IconCode,
   IconDashboard,
-  IconDatabase,
-  IconFileAi,
-  IconFileDescription,
-  IconFileWord,
-  IconFolder,
-  IconHelp,
+  IconFilter,
+
   IconInnerShadowTop,
-  IconListDetails,
-  IconReport,
-  IconSearch,
-  IconSettings,
-  IconUsers,
+
 } from "@tabler/icons-react"
 
 import { NavDocuments } from "@/components/nav-documents"
@@ -45,6 +34,11 @@ const data = {
       url: "/basic",
       icon: IconDashboard,
     },
+    {
+      title: '动态全局筛选器',
+      url: '/dynamic-filter',
+      icon: IconFilter,
+    }
 
   ]
 }
