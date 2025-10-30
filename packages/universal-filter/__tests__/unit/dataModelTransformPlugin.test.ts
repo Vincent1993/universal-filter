@@ -937,4 +937,103 @@ describe('DataModelTransformPlugin', () => {
       expect(filter.plugin.ready).toBe(true); // PluginManager 的 ready 可能仍然为 true
     });
   });
+
+  describe('applied 数据转换', () => {
+    it('应该确保 applied 是转换后的数据，draft 保持原始格式', async () => {
+      const transformer: TransformerConfig = {
+        name: 'snake-case-transform',
+        direction: 'outbound',
+        transform: (data: any) => {
+          const result: any = {};
+          for (const [key, value] of Object.entries(data)) {
+            const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
+            result[snakeKey] = value;
+          }
+          return result;
+        },
+      };
+
+      const filter = createFilter<TestDraft>({
+        defaultValues: {
+          firstName: 'John',
+          lastName: 'Doe',
+          userAge: 30,
+        },
+        plugins: [
+          createDataModelTransformPlugin({
+            transformers: [transformer],
+            applyOn: 'apply',
+          }),
+        ],
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // 修改值
+      filter.setValue('firstName', 'Jane');
+
+      // 执行 apply
+      await filter.apply();
+
+      // 等待转换完成
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // draft 应该保持原始格式（camelCase）
+      expect(filter.draft.firstName).toBe('Jane');
+      expect(filter.draft.lastName).toBe('Doe');
+      expect((filter.draft as any).first_name).toBeUndefined();
+
+      // applied 应该是转换后的格式（snake_case）
+      expect(filter.applied).toBeDefined();
+      expect((filter.applied as any).first_name).toBe('Jane');
+      expect((filter.applied as any).last_name).toBe('Doe');
+      expect((filter.applied as any).user_age).toBe(30);
+      expect((filter.applied as any).firstName).toBeUndefined();
+
+      filter.dispose();
+    });
+
+    it('应该支持多重转换链应用到 applied', async () => {
+      const transformers: TransformerConfig[] = [
+        {
+          name: 'step1',
+          transform: (data: any) => ({ ...data, step1: true }),
+        },
+        {
+          name: 'step2',
+          transform: (data: any) => ({ ...data, step2: true }),
+        },
+      ];
+
+      const filter = createFilter<TestDraft>({
+        defaultValues: {
+          firstName: 'John',
+          lastName: 'Doe',
+          userAge: 30,
+        },
+        plugins: [
+          createDataModelTransformPlugin({
+            transformers,
+            applyOn: 'apply',
+          }),
+        ],
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await filter.apply();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // draft 保持原始格式
+      expect((filter.draft as any).step1).toBeUndefined();
+      expect((filter.draft as any).step2).toBeUndefined();
+
+      // applied 包含所有转换步骤
+      expect(filter.applied).toBeDefined();
+      expect((filter.applied as any).step1).toBe(true);
+      expect((filter.applied as any).step2).toBe(true);
+
+      filter.dispose();
+    });
+  });
 });

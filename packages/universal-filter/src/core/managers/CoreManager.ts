@@ -151,10 +151,16 @@ export class CoreManager<TDraft extends Draft> {
       // 监听提交成功
       onFormSubmitSuccess((form) => {
         const currentDraft = toJS(form.values) as TDraft;
+        // 先设置 applied 为原始 draft（插件可能会在事件中修改它）
         this.applied = cloneDeep(currentDraft);
         const payload = cloneDeep(currentDraft);
+        
+        // 触发事件，允许插件修改 applied
         this.listeners?.onApplySuccess?.({ draft: currentDraft, payload });
         this.emitFn?.('apply:success', { draft: currentDraft, payload });
+        
+        // 注意：如果插件在事件中修改了 applied，修改后的值会保留
+        // 这允许数据转换插件在 apply:success 时转换 applied 数据
       });
 
       // 监听验证失败

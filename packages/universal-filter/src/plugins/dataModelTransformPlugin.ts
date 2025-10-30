@@ -1,5 +1,6 @@
 import type { Draft, Plugin, FilterApi } from '../core/types';
 import type EventEmitter from 'eventemitter3';
+import { cloneDeep } from 'es-toolkit';
 
 /**
  * 数据转换函数类型
@@ -217,7 +218,7 @@ export function createDataModelTransformPlugin<TDraft extends Draft = Draft>(
   };
 
   // 存储事件监听器的清理函数
-  let unsubscribeApplyStart: (() => void) | undefined;
+  let unsubscribeApplySuccess: (() => void) | undefined;
 
   return {
     name: 'data-model-transform-plugin',
@@ -234,26 +235,31 @@ export function createDataModelTransformPlugin<TDraft extends Draft = Draft>(
           }
         }
 
-        // 如果需要应用时转换，拦截 apply:start 事件
-        // 注意：我们不能在 apply:start 中修改表单值（会导致循环）
-        // 所以我们采用拦截策略：在提交前转换数据，但不修改表单
-        // 实际的转换应该在业务层的提交处理函数中使用 transformOutbound 函数
-        
+        // 如果需要应用时转换，在 apply:success 时转换 applied 数据
+        // draft 保持原始格式，applied 是转换后的数据
         if (applyOn === 'apply' || applyOn === 'both') {
-          // 监听 apply:start，记录日志提示用户使用转换函数
-          unsubscribeApplyStart = bus.on('apply:start', async ({ draft }) => {
+          // 使用 once 确保只处理一次，或者使用 on 但在处理中确保只转换一次
+          unsubscribeApplySuccess = bus.on('apply:success', async ({ draft }) => {
             try {
-              log('检测到 apply:start，使用 transformOutbound 转换数据');
-              // 转换数据但不修改表单（避免循环）
-              const transformed = await executeTransformChainInternal(draft, 'outbound');
-              log('转换后的数据:', transformed);
-              // 注意：实际的转换应该在业务层的提交处理函数中完成
-              // 这里只做日志记录，避免修改表单导致循环
+              log('检测到 apply:success，转换 applied 数据');
+              // 转换 draft 数据（保持 draft 原始格式，只转换 applied）
+              const transformedDraft = await executeTransformChainInternal(draft, 'outbound');
+              
+              // 更新 applied 为转换后的数据
+              // applied 是 public 属性，可以直接设置
+              root.applied = cloneDeep(transformedDraft) as TDraft;
+              
+              if (debug) {
+                log('转换完成，applied 已更新为转换后的数据:', root.applied);
+              }
             } catch (error) {
-              log('转换提交数据失败:', error);
+              if (debug) {
+                log('转换 applied 数据失败:', error);
+              }
               if (onError === 'throw') {
                 throw error;
               }
+              // skip 和 fallback 策略：保持原始 applied 值
             }
           });
         }
@@ -266,9 +272,9 @@ export function createDataModelTransformPlugin<TDraft extends Draft = Draft>(
     },
     onDestroy() {
       // 清理事件监听器
-      if (unsubscribeApplyStart) {
-        unsubscribeApplyStart();
-        unsubscribeApplyStart = undefined;
+      if (unsubscribeApplySuccess) {
+        unsubscribeApplySuccess();
+        unsubscribeApplySuccess = undefined;
       }
     },
   };
