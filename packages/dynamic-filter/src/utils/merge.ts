@@ -1,4 +1,4 @@
-import { merge, cloneDeep } from 'es-toolkit/compat';
+import { cloneDeep } from 'es-toolkit/compat';
 
 /**
  * 深度合并配置
@@ -24,19 +24,38 @@ export function mergeConfig<T = any>(
   // 克隆基础对象，避免修改原对象
   const result = cloneDeep(base);
 
-  // 逐个合并覆盖配置
   overrides.forEach(override => {
-    merge(result, override, (objValue, srcValue) => {
-      // 数组采用替换策略：直接用源数组替换目标数组
-      // 这对于 enum、validators 等数组配置非常有用
-      if (Array.isArray(srcValue)) {
-        return srcValue;
-      }
-      // 其他类型使用默认的深度合并行为
-      return undefined;
-    });
+    if (!override) return;
+    deepMerge(result as any, override as any);
   });
 
   return result;
+}
+
+function deepMerge(target: any, source: any) {
+  if (!source || typeof source !== 'object') {
+    return target;
+  }
+
+  Object.keys(source).forEach(key => {
+    const value = source[key];
+
+    if (Array.isArray(value)) {
+      target[key] = cloneDeep(value);
+      return;
+    }
+
+    if (value && typeof value === 'object') {
+      if (!target[key] || typeof target[key] !== 'object') {
+        target[key] = {};
+      }
+      deepMerge(target[key], value);
+      return;
+    }
+
+    target[key] = value;
+  });
+
+  return target;
 }
 
