@@ -33,8 +33,8 @@ export interface TransformerConfig<TSource = unknown, TTarget = unknown> {
   transform: TransformFn<TSource, TTarget>;
   /** 反向转换函数（可选）：从目标数据转换回源数据 */
   reverseTransform?: TransformFn<TTarget, TSource>;
-  /** 转换条件（可选）：决定是否应用此转换器 */
-  condition?: (data: unknown, context: TransformContext) => boolean;
+  /** 转换条件（可选）：决定是否应用此转换器，支持异步 */
+  condition?: (data: unknown, context: TransformContext) => boolean | Promise<boolean>;
   /** 转换方向（可选）：默认为 'both'，表示双向转换 */
   direction?: 'inbound' | 'outbound' | 'both';
 }
@@ -77,6 +77,7 @@ export interface DataModelTransformPluginOptions<TDraft extends Draft = Draft> {
  *
  * @example
  * ```ts
+ * // 基础同步转换
  * const plugin = createDataModelTransformPlugin({
  *   transformers: [
  *     {
@@ -84,13 +85,45 @@ export interface DataModelTransformPluginOptions<TDraft extends Draft = Draft> {
  *       transform: (data) => convertKeys(data, 'snake_case'),
  *       reverseTransform: (data) => convertKeys(data, 'camelCase'),
  *     },
- *     {
- *       name: 'date-format',
- *       transform: (data) => formatDates(data, 'ISO'),
- *       reverseTransform: (data) => parseDates(data),
- *     },
  *   ],
  *   applyOn: 'both',
+ * });
+ *
+ * // 异步转换示例
+ * const asyncPlugin = createDataModelTransformPlugin({
+ *   transformers: [
+ *     {
+ *       name: 'async-fetch',
+ *       transform: async (data) => {
+ *         // 模拟从 API 获取额外数据
+ *         const extraData = await fetchExtraData(data.id);
+ *         return { ...data, ...extraData };
+ *       },
+ *     },
+ *     {
+ *       name: 'async-validation',
+ *       condition: async (data) => {
+ *         // 异步条件检查
+ *         const isValid = await validateData(data);
+ *         return isValid;
+ *       },
+ *       transform: (data) => ({ ...data, validated: true }),
+ *     },
+ *   ],
+ *   applyOn: 'init',
+ *   onError: 'skip',
+ * });
+ *
+ * // 多重转换链（混合同步和异步）
+ * const chainPlugin = createDataModelTransformPlugin({
+ *   transformers: [
+ *     { name: 'step1', transform: (d) => ({ ...d, step1: true }) },
+ *     { name: 'step2', transform: async (d) => {
+ *       await delay(10);
+ *       return { ...d, step2: true };
+ *     }},
+ *     { name: 'step3', transform: (d) => ({ ...d, step3: true }) },
+ *   ],
  * });
  * ```
  */
@@ -131,10 +164,13 @@ export function createDataModelTransformPlugin<TDraft extends Draft = Draft>(
         continue;
       }
 
-      // 检查转换条件
-      if (condition && !condition(currentData, context)) {
-        log(`跳过转换器 ${name || 'unnamed'}（条件不满足）`);
-        continue;
+      // 检查转换条件（支持异步）
+      if (condition) {
+        const conditionResult = await condition(currentData, context);
+        if (!conditionResult) {
+          log(`跳过转换器 ${name || 'unnamed'}（条件不满足）`);
+          continue;
+        }
       }
 
       try {
@@ -247,8 +283,11 @@ export function createTransformFunctions(
         continue;
       }
 
-      if (condition && !condition(currentData, context)) {
-        continue;
+      if (condition) {
+        const conditionResult = await condition(currentData, context);
+        if (!conditionResult) {
+          continue;
+        }
       }
 
       try {
