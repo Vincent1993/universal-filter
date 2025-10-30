@@ -264,4 +264,21 @@ export class CoreManager<TDraft extends Draft> {
     this.listeners?.onReset?.({ scope: 'all' });
     this.emitFn?.('reset', { scope: 'all' });
   };
+
+  /**
+   * @internal
+   * 清理 CoreManager 内部引用，确保 Formily 实例正确卸载
+   */
+  protected disposeCore(): void {
+    // 移除在 setupApplyEffects 中注册的副作用，避免心跳残留
+    this.form.removeEffects('filter-apply');
+    // 根据 Formily 文档，调用 onUnmount 触发字段销毁与资源释放
+    this.form.onUnmount();
+
+    this.listeners = undefined;
+    this.defaultValues = undefined;
+    this.applied = undefined;
+    this.previous = undefined;
+    this.emitFn = undefined;
+  }
 }

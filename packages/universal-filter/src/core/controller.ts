@@ -92,9 +92,12 @@ export class FilterController<TDraft extends Draft>
     if (this.disposed) return;
     this.disposed = true;
 
-    this.plugin.dispose();
+    const listeners = this.listeners;
 
-    this.listeners?.onDestroy?.({ root: this });
+    this.plugin.dispose();
+    this.disposeCore();
+
+    listeners?.onDestroy?.({ root: this });
     this._bus.emit('destroy', {});
     this._bus.removeAllListeners();
   }

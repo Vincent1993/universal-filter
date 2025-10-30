@@ -32,6 +32,19 @@ describe('FilterController - 生命周期与事件', () => {
     expect(destroyedRoot).toBe(filter);
   });
 
+  it('dispose 应该卸载 Formily 表单并清理核心引用', () => {
+    const filter = createFilter();
+    const removeEffectsSpy = vi.spyOn(filter.form, 'removeEffects');
+
+    expect(filter.form.unmounted).toBe(false);
+
+    filter.dispose();
+
+    expect(removeEffectsSpy).toHaveBeenCalledWith('filter-apply');
+    expect(filter.form.unmounted).toBe(true);
+    expect(filter.listeners).toBeUndefined();
+  });
+
   it('插件销毁异常时应该继续销毁其他插件并上报错误', () => {
     const destroySpy = vi.fn();
     const faultyPlugin: PluginFactory<Draft> = () => ({
