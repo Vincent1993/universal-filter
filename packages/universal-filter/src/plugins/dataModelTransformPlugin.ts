@@ -158,9 +158,11 @@ export function createDataModelTransformPlugin<TDraft extends Draft = Draft>(
     for (const transformer of transformers) {
       const { name, transform, reverseTransform, condition, direction: transformerDirection } = transformer;
 
-      // 检查转换方向
+      // 检查转换方向（提前退出，避免后续检查）
       if (transformerDirection && transformerDirection !== 'both' && transformerDirection !== direction) {
-        log(`跳过转换器 ${name || 'unnamed'}（方向不匹配）`);
+        if (debug) {
+          log(`跳过转换器 ${name || 'unnamed'}（方向不匹配）`);
+        }
         continue;
       }
 
@@ -168,7 +170,9 @@ export function createDataModelTransformPlugin<TDraft extends Draft = Draft>(
       if (condition) {
         const conditionResult = await condition(currentData, context);
         if (!conditionResult) {
-          log(`跳过转换器 ${name || 'unnamed'}（条件不满足）`);
+          if (debug) {
+            log(`跳过转换器 ${name || 'unnamed'}（条件不满足）`);
+          }
           continue;
         }
       }
@@ -178,23 +182,31 @@ export function createDataModelTransformPlugin<TDraft extends Draft = Draft>(
         const transformFn = direction === 'inbound' ? transform : reverseTransform || transform;
 
         if (!transformFn) {
-          log(`警告：转换器 ${name || 'unnamed'} 缺少 ${direction} 方向的转换函数`);
+          if (debug) {
+            log(`警告：转换器 ${name || 'unnamed'} 缺少 ${direction} 方向的转换函数`);
+          }
           continue;
         }
 
-        log(`应用转换器 ${name || 'unnamed'} (${direction})`);
+        if (debug) {
+          log(`应用转换器 ${name || 'unnamed'} (${direction})`);
+        }
         const result = await transformFn(currentData, context);
 
         currentData = result;
       } catch (error) {
-        log(`转换器 ${name || 'unnamed'} 执行失败:`, error);
+        if (debug) {
+          log(`转换器 ${name || 'unnamed'} 执行失败:`, error);
+        }
 
         if (onError === 'throw') {
           throw new Error(
             `数据模型转换失败 [${name || 'unnamed'}] (${direction}): ${error instanceof Error ? error.message : String(error)}`
           );
         } else if (onError === 'fallback' && fallbackValue) {
-          log(`使用回退值`);
+          if (debug) {
+            log(`使用回退值`);
+          }
           return fallbackValue as T;
         }
         // 'skip' 策略：继续使用 currentData，不做转换

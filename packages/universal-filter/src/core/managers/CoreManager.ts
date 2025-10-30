@@ -63,6 +63,9 @@ export class CoreManager<TDraft extends Draft> {
   /** 防抖定时器句柄 */
   private applyDebounceTimer?: ReturnType<typeof setTimeout>;
 
+  /** changed 状态的缓存 */
+  private _changedCache?: { draft: TDraft; defaultValues: TDraft | undefined; result: boolean };
+
   // ==================== 构造函数 ====================
 
   constructor(optionsConfig: CoreOptions<TDraft> = {}) {
@@ -125,8 +128,10 @@ export class CoreManager<TDraft extends Draft> {
       onFormValuesChange((form) => {
         const nextDraft = toJS(form.values) as TDraft;
         const prevDraft = this.previousDraft;
-        // 更新 previousDraft 用于下次变化时使用
+        // 更新 previousDraft 用于下次变化时使用（深拷贝以保持独立性）
         this.previousDraft = cloneDeep(nextDraft);
+        // 清除 changed 缓存，因为 draft 已变化（onFormValuesChange 已触发，说明值已变化）
+        this._changedCache = undefined;
         this.listeners?.onDraftChange?.(nextDraft, prevDraft);
         this.emitFn?.('draft:change', {
           draft: nextDraft,
@@ -183,9 +188,23 @@ export class CoreManager<TDraft extends Draft> {
   /**
    * 检查表单是否发生变化（深度比较 draft 与 defaultValues）
    * 如果要检查表单是否已经被操作过，使用 state.modified 代替
+   * 使用缓存优化性能：缓存结果，只在 draft 或 defaultValues 明确变化时清除
    */
   get changed(): boolean {
-    return !isEqual(this.draft, this.defaultValues);
+    // 如果缓存存在，直接返回（因为我们会在值变化时清除缓存）
+    if (this._changedCache !== undefined) {
+      return this._changedCache.result;
+    }
+
+    // 执行深度比较并缓存结果
+    const result = !isEqual(this.draft, this.defaultValues);
+    this._changedCache = {
+      draft: this.draft, // 仅用于类型，不用于比较
+      defaultValues: this.defaultValues,
+      result,
+    };
+
+    return result;
   }
 
   /**
@@ -205,6 +224,8 @@ export class CoreManager<TDraft extends Draft> {
     values: Partial<TDraft>,
     strategy?: IFormMergeStrategy
   ): void => {
+    // 清除 changed 缓存，因为 draft 将变化
+    this._changedCache = undefined;
     this.form.setValues(values, strategy);
   };
 
@@ -213,6 +234,8 @@ export class CoreManager<TDraft extends Draft> {
    * @see https://core.formilyjs.org/zh-CN/api/models/form#setvaluesin
    */
   setValue = (path: FormPathPattern, value: unknown): void => {
+    // 清除 changed 缓存，因为 draft 将变化
+    this._changedCache = undefined;
     this.form.setValuesIn(path, value);
   };
 
@@ -221,6 +244,8 @@ export class CoreManager<TDraft extends Draft> {
    * @see https://core.formilyjs.org/zh-CN/api/models/form#deletevaluesin
    */
   deleteValue = (path: FormPathPattern): void => {
+    // 清除 changed 缓存，因为 draft 将变化
+    this._changedCache = undefined;
     this.form.deleteValuesIn(path);
   };
 
@@ -234,6 +259,8 @@ export class CoreManager<TDraft extends Draft> {
   ): void => {
     const plainObject = cloneDeep(values) as unknown as TDraft;
     this.defaultValues = plainObject;
+    // 清除 changed 缓存，因为 defaultValues 已变化
+    this._changedCache = undefined;
     this.form.setInitialValues(plainObject, strategy);
   };
 
@@ -308,6 +335,8 @@ export class CoreManager<TDraft extends Draft> {
 
     // 更新 previousDraft
     this.previousDraft = cloneDeep(nextValues as TDraft);
+    // 清除 changed 缓存，因为 draft 已重置
+    this._changedCache = undefined;
 
     this.listeners?.onReset?.({ scope: 'all' });
     this.emitFn?.('reset', { scope: 'all' });
@@ -334,6 +363,7 @@ export class CoreManager<TDraft extends Draft> {
     this.applied = undefined;
     this.previous = undefined;
     this.previousDraft = undefined;
+    this._changedCache = undefined;
     this.emitFn = undefined;
     this.applyDebounceMs = undefined;
   }
