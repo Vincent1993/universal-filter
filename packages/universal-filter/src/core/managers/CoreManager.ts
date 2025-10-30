@@ -42,17 +42,26 @@ export class CoreManager<TDraft extends Draft> {
   /** 默认值 */
   defaultValues: TDraft | undefined;
 
+  /** 防抖延迟时间（毫秒） */
+  private applyDebounceMs?: number;
+
   /** 已应用的状态快照（最后一次 apply 成功的状态） */
   applied?: TDraft;
 
   /** 上一次的状态快照（apply 开始时的状态，可用于撤销或对比） */
   previous?: TDraft;
 
+  /** 上一次的草稿状态（用于 draft:change 事件中的 prev 参数） */
+  private previousDraft?: TDraft;
+
   /** 事件发射函数 (由 Controller 提供) */
   private emitFn?: <K extends keyof FilterEventMap<TDraft>>(
     event: K,
     payload: FilterEventMap<TDraft>[K]
   ) => void;
+
+  /** 防抖定时器句柄 */
+  private applyDebounceTimer?: ReturnType<typeof setTimeout>;
 
   // ==================== 构造函数 ====================
 
@@ -73,6 +82,7 @@ export class CoreManager<TDraft extends Draft> {
     this.listeners = config.listeners;
     this.defaultValues = config.defaultValues;
     this.emitFn = config.emitFn;
+    this.applyDebounceMs = config.applyDebounceMs;
   }
 
   /**
@@ -96,6 +106,13 @@ export class CoreManager<TDraft extends Draft> {
       values: config.values,
       ...config.formilyOptions,
     }) as Form;
+    
+    // 初始化 previousDraft 为当前表单值
+    if (config.values) {
+      this.previousDraft = cloneDeep(config.values) as TDraft;
+    } else if (this.defaultValues) {
+      this.previousDraft = cloneDeep(this.defaultValues);
+    }
   }
 
   /**
@@ -106,35 +123,39 @@ export class CoreManager<TDraft extends Draft> {
     this.form.addEffects('filter-apply', () => {
       // 监听表单值变化
       onFormValuesChange((form) => {
-        const nextDraft = form.values as TDraft;
-        this.listeners?.onDraftChange?.(nextDraft, this.previous);
+        const nextDraft = toJS(form.values) as TDraft;
+        const prevDraft = this.previousDraft;
+        // 更新 previousDraft 用于下次变化时使用
+        this.previousDraft = cloneDeep(nextDraft);
+        this.listeners?.onDraftChange?.(nextDraft, prevDraft);
         this.emitFn?.('draft:change', {
           draft: nextDraft,
-          prev: this.previous,
+          prev: prevDraft,
         });
       });
 
       // 监听提交开始
       onFormSubmitStart((form) => {
+        // previous 保存 apply 开始时的状态
         this.previous = cloneDeep(this.draft);
-        const current = cloneDeep(form.values) as TDraft;
+        const current = toJS(form.values) as TDraft;
         this.listeners?.onApplyStart?.({ draft: current });
         this.emitFn?.('apply:start', { draft: current });
       });
 
       // 监听提交成功
       onFormSubmitSuccess((form) => {
-        this.applied = toJS(form.values) as TDraft;
-        const current = this.draft;
-        const payload = cloneDeep(form.values) as TDraft;
-        this.listeners?.onApplySuccess?.({ draft: current, payload });
-        this.emitFn?.('apply:success', { draft: current, payload });
+        const currentDraft = toJS(form.values) as TDraft;
+        this.applied = cloneDeep(currentDraft);
+        const payload = cloneDeep(currentDraft);
+        this.listeners?.onApplySuccess?.({ draft: currentDraft, payload });
+        this.emitFn?.('apply:success', { draft: currentDraft, payload });
       });
 
       // 监听验证失败
       onFormValidateFailed((form) => {
         const errors = form.getState().errors;
-        const current = form.getFormState().values;
+        const current = toJS(form.getFormState().values) as TDraft;
         this.listeners?.onValidateFailed?.({ draft: current, errors });
         this.emitFn?.('validate:failed', { draft: current, errors });
       });
@@ -233,26 +254,44 @@ export class CoreManager<TDraft extends Draft> {
 
   /**
    * 应用当前表单状态（触发验证并创建快照）
+   * 如果配置了 applyDebounceMs，会自动防抖
    */
   apply = async (): Promise<void> => {
-    await this.form.submit();
+    // 如果配置了防抖，先清除之前的定时器
+    if (this.applyDebounceTimer) {
+      clearTimeout(this.applyDebounceTimer);
+      this.applyDebounceTimer = undefined;
+    }
+
+    // 如果配置了防抖延迟
+    if (this.applyDebounceMs && this.applyDebounceMs > 0) {
+      return new Promise<void>((resolve, reject) => {
+        this.applyDebounceTimer = setTimeout(async () => {
+          try {
+            await this.form.submit();
+            resolve();
+          } catch (error) {
+            reject(error);
+          } finally {
+            this.applyDebounceTimer = undefined;
+          }
+        }, this.applyDebounceMs);
+      });
+    }
+
+    // 无防抖，直接执行
+    return this.form.submit();
   };
 
   /**
    * @name 重置所有表单项
    * @param options - 重置选项
-   * @param pattern - 需要被清理的表单的路径，默认为全部
    * @param options.forceClear - true 时，会清除所有字段值，false 时，重置到初始化值
    * @param options.validate - 是否触发校验
    * @see https://core.formilyjs.org/zh-CN/api/models/field/#ifieldresetoptions
    * @description 如果需要对单个或者多个字段进行重置操作，用 this.form.reset 方法进行自定义
    */
   reset = (options?: IFieldResetOptions): void => {
-    this.form.reset('*', {
-      forceClear: options?.forceClear ?? false,
-      validate: options?.validate ?? false,
-    });
-
     const shouldForceClear = options?.forceClear ?? false;
     const nextValues = shouldForceClear
       ? {}
@@ -260,7 +299,16 @@ export class CoreManager<TDraft extends Draft> {
         ? cloneDeep(this.defaultValues)
         : {};
 
+    // 先设置值，再重置（这样更高效，避免两次更新）
     this.form.setValues(nextValues as Partial<TDraft>, 'overwrite');
+    this.form.reset('*', {
+      forceClear: shouldForceClear,
+      validate: options?.validate ?? false,
+    });
+
+    // 更新 previousDraft
+    this.previousDraft = cloneDeep(nextValues as TDraft);
+
     this.listeners?.onReset?.({ scope: 'all' });
     this.emitFn?.('reset', { scope: 'all' });
   };
@@ -270,6 +318,12 @@ export class CoreManager<TDraft extends Draft> {
    * 清理 CoreManager 内部引用，确保 Formily 实例正确卸载
    */
   protected disposeCore(): void {
+    // 清除防抖定时器
+    if (this.applyDebounceTimer) {
+      clearTimeout(this.applyDebounceTimer);
+      this.applyDebounceTimer = undefined;
+    }
+
     // 移除在 setupApplyEffects 中注册的副作用，避免心跳残留
     this.form.removeEffects('filter-apply');
     // 根据 Formily 文档，调用 onUnmount 触发字段销毁与资源释放
@@ -279,6 +333,8 @@ export class CoreManager<TDraft extends Draft> {
     this.defaultValues = undefined;
     this.applied = undefined;
     this.previous = undefined;
+    this.previousDraft = undefined;
     this.emitFn = undefined;
+    this.applyDebounceMs = undefined;
   }
 }

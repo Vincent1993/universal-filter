@@ -9,3 +9,4 @@ export { FilterProvider, FilterConfigure, useConfigure, getGlobalConfigure } fro
 
 // Plugins
 export * from './plugins/urlSyncPlugin';
+export * from './plugins/dataModelTransformPlugin';
