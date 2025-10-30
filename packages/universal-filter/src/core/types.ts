@@ -10,6 +10,11 @@ export type Draft = Record<string, any>;
 export type JsonRecord = Record<string, unknown>;
 
 // 事件总线类型
+export interface PluginDisposeError {
+  name: string;
+  error: unknown;
+}
+
 export interface FilterEventMap<TDraft extends Draft = Draft> {
   'draft:change': { draft: TDraft; prev?: TDraft };
   'apply:start': { draft: TDraft };
@@ -19,6 +24,7 @@ export interface FilterEventMap<TDraft extends Draft = Draft> {
   'plugin:ready': { name: string; ready: boolean; error?: unknown };
   'plugins:ready': { ready: boolean };
   'plugins:attached': { total: number };
+  'plugins:destroyed': { errors: PluginDisposeError[] };
   'destroy': {};
 }
 
@@ -168,9 +174,16 @@ export interface LoadOptions{
 
 // FilterApi - 基于 Formily Form 的过滤器 API
 // 通过 form 属性访问所有 Formily 原生功能，同时提供过滤器特定功能
-export interface FilterApi<TDraft extends Draft = Draft> extends CoreManager<TDraft> {
+export interface FilterApi<TDraft extends Draft = Draft>
+  extends CoreManager<TDraft>,
+    FilterEvents<TDraft> {
   /** 插件命名空间 - 直接暴露 PluginManager 实例 */
   readonly plugin: PluginManager<TDraft>;
+
+  /**
+   * 销毁当前过滤器实例，触发所有插件和监听器的清理逻辑
+   */
+  dispose(): void;
 
   // 预留：其他命名空间（schema/shard/options/group），逐步补齐
   // readonly schema?: SchemaManager<TDraft>;

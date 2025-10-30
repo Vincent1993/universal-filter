@@ -1,4 +1,10 @@
-import type { Draft, FilterApi, FilterOptions, PluginFactory } from './types';
+import type {
+  Draft,
+  FilterApi,
+  FilterEventMap,
+  FilterOptions,
+  PluginFactory,
+} from './types';
 import EventEmitter from 'eventemitter3';
 import { CoreManager, PluginManager } from './managers';
 import { getGlobalConfigure } from '../context';
@@ -8,9 +14,14 @@ import { getGlobalConfigure } from '../context';
  * 继承 CoreManager,组合 PluginManager 等模块
  * 通过内部事件总线协调模块间通信
  */
-export class FilterController<TDraft extends Draft> extends CoreManager<TDraft> {
+export class FilterController<TDraft extends Draft>
+  extends CoreManager<TDraft>
+  implements FilterApi<TDraft>
+{
   // ============== 内部事件总线 ==============
-  readonly _bus = new EventEmitter();
+  readonly _bus = new EventEmitter<FilterEventMap<TDraft>>();
+
+  private disposed = false;
 
   // ============== 模块命名空间 ==============
   readonly plugin: PluginManager<TDraft>;
@@ -54,11 +65,40 @@ export class FilterController<TDraft extends Draft> extends CoreManager<TDraft> 
     }
   }
 
-  dispose() {
-    // 清理所有事件监听器
-    this._bus.removeAllListeners()
+  on<K extends keyof FilterEventMap<TDraft>>(
+    event: K,
+    listener: (payload: FilterEventMap<TDraft>[K]) => void
+  ): () => void {
+    this._bus.on(event, listener);
+    return () => this.off(event, listener);
+  }
 
-    // 清理所有插件
+  once<K extends keyof FilterEventMap<TDraft>>(
+    event: K,
+    listener: (payload: FilterEventMap<TDraft>[K]) => void
+  ): () => void {
+    this._bus.once(event, listener);
+    return () => this.off(event, listener);
+  }
+
+  off<K extends keyof FilterEventMap<TDraft>>(
+    event: K,
+    listener: (payload: FilterEventMap<TDraft>[K]) => void
+  ): void {
+    this._bus.off(event, listener);
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+
+    const listeners = this.listeners;
+
     this.plugin.dispose();
+    this.disposeCore();
+
+    listeners?.onDestroy?.({ root: this });
+    this._bus.emit('destroy', {});
+    this._bus.removeAllListeners();
   }
 }

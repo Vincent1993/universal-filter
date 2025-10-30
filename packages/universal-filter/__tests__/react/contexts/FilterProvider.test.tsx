@@ -9,7 +9,15 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 
-import { render, screen, renderHookWithFilter, createTestFilter, createNestedWrapper } from '../../test-utils';
+import {
+  render,
+  screen,
+  waitFor,
+  renderHookWithFilter,
+  createTestFilter,
+  createNestedWrapper,
+} from '../../test-utils';
+import { render as rtlRender } from '@testing-library/react';
 import { FilterProvider } from '../../../src/context/Provider';
 import { useFilter } from '../../../src/hooks/useFilter';
 import { useField } from '../../../src/hooks/useField';
@@ -164,7 +172,7 @@ describe('FilterProvider', () => {
   // ==================== ErrorBoundary 测试 ====================
 
   describe('ErrorBoundary', () => {
-    it('应该捕获子组件渲染错误', () => {
+    it('应该捕获子组件渲染错误', async () => {
       // 抑制 console.error
       const originalError = console.error;
       console.error = vi.fn();
@@ -182,7 +190,7 @@ describe('FilterProvider', () => {
       });
 
       // 应该显示错误界面而不是崩溃
-      expect(screen.getByText(/发生错误|error/i)).toBeInTheDocument();
+      expect(await screen.findByRole('alert')).toBeInTheDocument();
 
       console.error = originalError;
     });
@@ -235,7 +243,7 @@ describe('FilterProvider', () => {
       console.error = originalError;
     });
 
-    it('应该支持 onReset 回调', () => {
+    it('应该支持 onReset 回调', async () => {
       const originalError = console.error;
       console.error = vi.fn();
 
@@ -255,46 +263,50 @@ describe('FilterProvider', () => {
       });
 
       // 点击重置按钮
-      const resetButton = screen.getByText(/重置|reset/i);
+      const resetButton = await screen.findByRole('button', {
+        name: /重置错误状态|重试/i,
+      });
       resetButton.click();
 
-      expect(onReset).toHaveBeenCalled();
+      await waitFor(() => {
+        expect(onReset).toHaveBeenCalled();
+      });
 
       console.error = originalError;
     });
 
-    it('应该支持 resetKeys 自动重置', () => {
+    it('应该支持 resetKeys 自动重置', async () => {
       const originalError = console.error;
       console.error = vi.fn();
 
-      let shouldThrow = true;
-
-      function ConditionalError() {
+      function ConditionalError({ shouldThrow }: { shouldThrow: boolean }) {
         if (shouldThrow) {
           throw new Error('Conditional Error');
         }
         return <div data-testid="recovered">已恢复</div>;
       }
 
-      function TestComponent() {
-        return <ConditionalError />;
-      }
-
-      const { rerender } = render(<TestComponent />, {
-        filterInstance: testFilter,
-        resetKeys: [shouldThrow],
-      });
+      const { rerender, unmount } = rtlRender(
+        <FilterProvider instance={testFilter} resetKeys={[true]}>
+          <ConditionalError shouldThrow={true} />
+        </FilterProvider>
+      );
 
       // 应该显示错误
-      expect(screen.getByText(/发生错误|error/i)).toBeInTheDocument();
+      expect(await screen.findByRole('alert')).toBeInTheDocument();
 
       // 修改条件，重新渲染
-      shouldThrow = false;
-      rerender(<TestComponent />);
+      rerender(
+        <FilterProvider instance={testFilter} resetKeys={[false]}>
+          <ConditionalError shouldThrow={false} />
+        </FilterProvider>
+      );
 
       // 应该自动恢复
-      expect(screen.getByTestId('recovered')).toHaveTextContent('已恢复');
+      const recovered = await screen.findByTestId('recovered');
+      expect(recovered).toHaveTextContent('已恢复');
 
+      unmount();
       console.error = originalError;
     });
   });

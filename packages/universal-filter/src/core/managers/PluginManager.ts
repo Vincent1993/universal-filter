@@ -1,4 +1,11 @@
-import type { Draft, Plugin, FilterApi, PluginFactory } from '../types';
+import type {
+  Draft,
+  Plugin,
+  FilterApi,
+  PluginFactory,
+  PluginDisposeError,
+  FilterEventMap,
+} from '../types';
 import type EventEmitter from 'eventemitter3';
 
 /**
@@ -26,7 +33,7 @@ export class PluginManager<TDraft extends Draft> {
   private readonly pluginMap = new Map<string, Plugin<TDraft>>();
 
   constructor(
-    private bus: EventEmitter,
+    private bus: EventEmitter<FilterEventMap<TDraft>>,
     instancePlugins: PluginFactory<TDraft>[],
     globalPlugins: PluginFactory<TDraft>[],
     mergeStrategy: 'prepend' | 'append',
@@ -88,30 +95,56 @@ export class PluginManager<TDraft extends Draft> {
 
     // 按照插件注册顺序执行初始化
     for (const plugin of this.plugins) {
+      let invoked = false;
+      const markReady = (ready: boolean, error?: unknown) => {
+        invoked = true;
+        this.pluginReady.set(plugin.name, { ready, error });
+        this.bus.emit('plugin:ready', { name: plugin.name, ready, error });
+      };
+
       if (typeof plugin.onInit === 'function') {
-        await plugin.onInit({
-          root: filter,
-          setReady: (ready: boolean, error?: unknown) => {
-            this.pluginReady.set(plugin.name, { ready, error });
-            this.bus.emit('plugin:ready', { name: plugin.name, ready, error });
-          },
-          bus: this.bus,
-          isReady: () => this.pluginReady.get(plugin.name)?.ready === true,
-        });
+        try {
+          await plugin.onInit({
+            root: filter,
+            setReady: markReady,
+            bus: this.bus,
+            isReady: () => this.pluginReady.get(plugin.name)?.ready === true,
+          });
+        } catch (error) {
+          markReady(false, error);
+          continue;
+        }
+
+        if (!invoked) {
+          markReady(true);
+        }
+      } else {
+        markReady(true);
       }
     }
     this.bus.emit('plugins:ready', { ready: this.ready });
   }
 
-  dispose() {
-    // 按照插件注册顺序执行销毁
+  dispose(): { errors: PluginDisposeError[] } {
+    const errors: PluginDisposeError[] = [];
+
     for (const plugin of this.plugins) {
       if (typeof plugin.onDestroy === 'function') {
-        plugin.onDestroy();
+        try {
+          plugin.onDestroy();
+        } catch (error) {
+          errors.push({ name: plugin.name, error });
+        }
       }
     }
 
-    this.bus.emit('plugins:destroyed');
+    this.plugins = [];
+    this.pluginMap.clear();
+    this.pluginReady.clear();
+
+    this.bus.emit('plugins:destroyed', { errors });
+
+    return { errors };
   }
 
 
