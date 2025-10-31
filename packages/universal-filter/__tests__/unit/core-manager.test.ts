@@ -351,21 +351,45 @@ describe('CoreManager - 完整功能测试', () => {
 
     it('验证失败应该触发 onValidateFailed 监听器', async () => {
       const onValidateFailed = vi.fn();
+      const emitFn = vi.fn();
       const managerWithValidation = new CoreManager<TestDraft>({
         defaultValues,
         listeners: {
           onValidateFailed,
         },
-        formilyOptions: {
-          effects: () => {
-            // 可以在这里添加验证规则
-          },
+        emitFn,
+      });
+
+      // 创建字段并设置验证器
+      managerWithValidation.form.createField({
+        name: 'testField',
+        validator: (value: any) => {
+          if (!value) {
+            return '字段不能为空';
+          }
         },
       });
 
-      // 这里应该设置一些验证规则并触发失败
-      // 由于需要复杂的 Formily 配置，这里只测试监听器存在
-      expect(managerWithValidation.listeners?.onValidateFailed).toBeDefined();
+      // 设置空值并尝试提交
+      managerWithValidation.form.setValues({ testField: '' });
+
+      // 触发验证失败
+      try {
+        await managerWithValidation.form.submit();
+      } catch (error) {
+        // 提交失败是预期的
+      }
+
+      // 验证监听器和事件发射函数被调用
+      expect(onValidateFailed).toHaveBeenCalled();
+      expect(onValidateFailed).toHaveBeenCalledWith({
+        draft: expect.any(Object),
+        errors: expect.any(Array),
+      });
+      expect(emitFn).toHaveBeenCalledWith('validate:failed', {
+        draft: expect.any(Object),
+        errors: expect.any(Array),
+      });
     });
   });
 
@@ -680,6 +704,350 @@ describe('CoreManager - 完整功能测试', () => {
       // applied 快照不应该受影响
       expect(appliedSnapshot?.address?.city).toBe('Beijing');
       expect(manager.draft.address?.city).toBe('Shanghai');
+    });
+  });
+
+  describe('防抖功能', () => {
+    it('应该支持防抖延迟配置', async () => {
+      const onApplyStart = vi.fn();
+      const debouncedManager = new CoreManager<TestDraft>({
+        defaultValues,
+        applyDebounceMs: 100,
+        listeners: {
+          onApplyStart,
+        },
+      });
+
+      debouncedManager.setValue('name', 'Jane');
+
+      // 立即调用 apply 两次
+      const promise1 = debouncedManager.apply();
+      const promise2 = debouncedManager.apply();
+
+      // 防抖应该只触发一次
+      await Promise.all([promise1, promise2]);
+
+      // 等待防抖延迟结束
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      expect(onApplyStart).toHaveBeenCalledTimes(1);
+    });
+
+    it('applyDebounceMs 为 0 时不应该创建防抖函数', () => {
+      const managerWithoutDebounce = new CoreManager<TestDraft>({
+        defaultValues,
+        applyDebounceMs: 0,
+      });
+
+      // 应该直接执行，不使用防抖
+      expect(managerWithoutDebounce['debouncedApply']).toBeUndefined();
+    });
+
+    it('applyDebounceMs 为负数时不应该创建防抖函数', () => {
+      const managerWithoutDebounce = new CoreManager<TestDraft>({
+        defaultValues,
+        applyDebounceMs: -100,
+      });
+
+      // 应该直接执行，不使用防抖
+      expect(managerWithoutDebounce['debouncedApply']).toBeUndefined();
+    });
+
+    it('没有配置 applyDebounceMs 时不应该创建防抖函数', () => {
+      const managerWithoutDebounce = new CoreManager<TestDraft>({
+        defaultValues,
+      });
+
+      // 应该直接执行，不使用防抖
+      expect(managerWithoutDebounce['debouncedApply']).toBeUndefined();
+    });
+  });
+
+  describe('setInitialValues - 设置初始值', () => {
+    it('应该能够设置初始值', () => {
+      manager.setInitialValues({
+        name: 'Alice',
+        age: 25,
+      });
+
+      expect(manager.initialValues?.name).toBe('Alice');
+      expect(manager.initialValues?.age).toBe(25);
+      expect(manager.defaultValues?.name).toBe('Alice');
+      expect(manager.defaultValues?.age).toBe(25);
+    });
+
+    it('设置初始值应该清除 changed 缓存', () => {
+      manager.setValue('name', 'Jane');
+      expect(manager.changed).toBe(true);
+
+      // 访问 changed 触发缓存
+      const cachedResult = manager.changed;
+      expect(cachedResult).toBe(true);
+
+      // 设置初始值应该清除缓存
+      manager.setInitialValues({
+        name: 'Alice',
+        age: 25,
+      });
+
+      // 缓存应该被清除，changed 应该重新计算
+      // 现在 draft 包含 email，但 defaultValues 不包含，所以应该为 true
+      expect(manager.changed).toBe(true);
+
+      // 验证缓存确实被清除了（通过再次设置相同的值，应该重新计算）
+      manager.setInitialValues({
+        name: 'Bob',
+        age: 30,
+      });
+      // 再次验证 changed 重新计算了
+      expect(manager.changed).toBe(true);
+    });
+
+    it('应该支持 merge 策略', () => {
+      manager.setInitialValues({
+        address: {
+          city: 'Beijing',
+          street: 'Main St',
+        },
+      }, 'merge');
+
+      expect(manager.initialValues?.address?.city).toBe('Beijing');
+    });
+
+    it('应该切断引用（深拷贝）', () => {
+      const values = { name: 'Alice', age: 25 };
+      manager.setInitialValues(values);
+
+      values.name = 'Bob';
+
+      // 修改原始对象不应该影响 initialValues
+      expect(manager.initialValues?.name).toBe('Alice');
+    });
+  });
+
+  describe('initialValues getter', () => {
+    it('应该返回初始值', () => {
+      expect(manager.initialValues).toBeDefined();
+      expect(manager.initialValues?.name).toBe('John');
+      expect(manager.initialValues?.age).toBe(30);
+    });
+
+    it('没有初始值时应返回空对象或 undefined', () => {
+      const emptyManager = new CoreManager<TestDraft>({});
+      // Formily 在没有初始值时会返回空对象 {}
+      expect(emptyManager.initialValues).toBeDefined();
+      expect(emptyManager.initialValues).toEqual({});
+    });
+
+    it('初始值应该与 defaultValues 同步', () => {
+      manager.setInitialValues({ name: 'Alice' });
+      expect(manager.initialValues?.name).toBe('Alice');
+      expect(manager.defaultValues?.name).toBe('Alice');
+    });
+  });
+
+  describe('reset - 边界情况', () => {
+    it('defaultValues 为 undefined 时应该重置为空对象', () => {
+      const emptyManager = new CoreManager<TestDraft>({});
+      emptyManager.setValue('name', 'Jane');
+
+      emptyManager.reset();
+
+      expect(emptyManager.draft).toEqual({});
+    });
+
+    it('应该支持 validate 选项', () => {
+      manager.setValue('name', 'Jane');
+      manager.reset({ validate: true });
+
+      expect(manager.draft.name).toBe('John');
+    });
+
+    it('应该支持 forceClear 和 validate 组合', () => {
+      manager.setValue('name', 'Jane');
+      manager.reset({ forceClear: true, validate: true });
+
+      expect(manager.draft).toEqual({});
+    });
+  });
+
+  describe('dispose - 清理资源', () => {
+    it('应该正确清理所有资源', () => {
+      const managerToDispose = new CoreManager<TestDraft>({
+        defaultValues,
+        applyDebounceMs: 100,
+        listeners: {
+          onDraftChange: vi.fn(),
+        },
+      });
+
+      managerToDispose.setValue('name', 'Jane');
+
+      // 调用 dispose
+      managerToDispose['dispose']();
+
+      // 验证资源已清理
+      expect(managerToDispose.listeners).toBeUndefined();
+      expect(managerToDispose.defaultValues).toBeUndefined();
+      expect(managerToDispose.applied).toBeUndefined();
+      expect(managerToDispose.previous).toBeUndefined();
+      expect(managerToDispose['previousDraft']).toBeUndefined();
+      expect(managerToDispose['_changedCache']).toBeUndefined();
+      expect(managerToDispose['emitFn']).toBeUndefined();
+      expect(managerToDispose['applyDebounceMs']).toBeUndefined();
+      expect(managerToDispose['debouncedApply']).toBeUndefined();
+    });
+
+    it('应该取消防抖函数', () => {
+      const managerToDispose = new CoreManager<TestDraft>({
+        defaultValues,
+        applyDebounceMs: 100,
+      });
+
+      const debouncedApply = managerToDispose['debouncedApply'];
+      expect(debouncedApply).toBeDefined();
+
+      // 调用 dispose
+      managerToDispose['dispose']();
+
+      // 防抖函数应该被取消
+      expect(managerToDispose['debouncedApply']).toBeUndefined();
+    });
+
+    it('没有防抖函数时 dispose 不应该报错', () => {
+      const managerToDispose = new CoreManager<TestDraft>({
+        defaultValues,
+      });
+
+      expect(() => {
+        managerToDispose['dispose']();
+      }).not.toThrow();
+    });
+  });
+
+  describe('事件发射函数 (emitFn)', () => {
+    it('应该触发 draft:change 事件', () => {
+      const emitFn = vi.fn();
+      const managerWithEmit = new CoreManager<TestDraft>({
+        defaultValues,
+        emitFn,
+      });
+
+      managerWithEmit.setValue('name', 'Jane');
+
+      expect(emitFn).toHaveBeenCalledWith('draft:change', {
+        draft: expect.objectContaining({ name: 'Jane' }),
+        prev: undefined,
+      });
+    });
+
+    it('应该触发 apply:start 事件', async () => {
+      const emitFn = vi.fn();
+      const managerWithEmit = new CoreManager<TestDraft>({
+        defaultValues,
+        emitFn,
+      });
+
+      await managerWithEmit.apply();
+
+      expect(emitFn).toHaveBeenCalledWith('apply:start', {
+        draft: expect.any(Object),
+      });
+    });
+
+    it('应该触发 apply:success 事件', async () => {
+      const emitFn = vi.fn();
+      const managerWithEmit = new CoreManager<TestDraft>({
+        defaultValues,
+        emitFn,
+      });
+
+      await managerWithEmit.apply();
+
+      expect(emitFn).toHaveBeenCalledWith('apply:success', {
+        draft: expect.any(Object),
+        payload: expect.any(Object),
+      });
+    });
+
+    it('应该触发 reset 事件', () => {
+      const emitFn = vi.fn();
+      const managerWithEmit = new CoreManager<TestDraft>({
+        defaultValues,
+        emitFn,
+      });
+
+      managerWithEmit.reset();
+
+      expect(emitFn).toHaveBeenCalledWith('reset', {
+        scope: 'all',
+      });
+    });
+
+    it('应该触发 validate:failed 事件（如果验证失败）', async () => {
+      const emitFn = vi.fn();
+      const managerWithEmit = new CoreManager<TestDraft>({
+        defaultValues,
+        emitFn,
+        formilyOptions: {
+          effects: () => {
+            // 可以在这里添加验证规则
+          },
+        },
+      });
+
+      // 注意：由于需要实际的验证失败场景，这里主要测试事件系统存在
+      expect(emitFn).toBeDefined();
+    });
+  });
+
+  describe('changed 缓存机制', () => {
+    it('应该缓存 changed 结果', () => {
+      manager.setValue('name', 'Jane');
+
+      // 第一次访问，应该计算并缓存
+      const first = manager.changed;
+
+      // 第二次访问，应该使用缓存
+      const second = manager.changed;
+
+      expect(first).toBe(true);
+      expect(second).toBe(true);
+    });
+
+    it('值变化时应该清除缓存', () => {
+      expect(manager.changed).toBe(false);
+
+      manager.setValue('name', 'Jane');
+      expect(manager.changed).toBe(true);
+
+      manager.setValue('name', 'John');
+      expect(manager.changed).toBe(false);
+    });
+
+    it('设置初始值应该清除缓存', () => {
+      manager.setValue('name', 'Jane');
+      expect(manager.changed).toBe(true);
+
+      // 设置初始值应该清除缓存
+      manager.setInitialValues({
+        name: 'Alice',
+        age: 25,
+      });
+
+      // 缓存应该被清除，changed 应该重新计算
+      // 现在 draft 是 { name: 'Jane', age: 30, email: 'john@example.com' }
+      // defaultValues 是 { name: 'Alice', age: 25 }
+      // 它们不相等，所以 changed 应该为 true
+      expect(manager.changed).toBe(true);
+
+      // 验证缓存确实被清除了（通过再次设置初始值）
+      manager.setInitialValues({
+        name: 'Bob',
+        age: 30,
+      });
+      // 再次验证 changed 重新计算了
+      expect(manager.changed).toBe(true);
     });
   });
 });

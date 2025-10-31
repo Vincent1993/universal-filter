@@ -14,7 +14,7 @@ import {
 } from '@formily/core';
 import { toJS, define, observable } from '@formily/reactive';
 import type { Draft, FilterEventMap, FilterListeners, FilterOptions } from '../types';
-import { cloneDeep, isEqual } from 'es-toolkit';
+import { cloneDeep, isEqual, debounce } from 'es-toolkit';
 
 // CoreManager 扩展选项
 interface CoreOptions<TDraft extends Draft> extends FilterOptions<TDraft> {
@@ -60,8 +60,8 @@ export class CoreManager<TDraft extends Draft> {
     payload: FilterEventMap<TDraft>[K]
   ) => void;
 
-  /** 防抖定时器句柄 */
-  private applyDebounceTimer?: ReturnType<typeof setTimeout>;
+  /** 防抖版本的 apply 执行函数 */
+  private debouncedApply?: ReturnType<typeof debounce<() => Promise<void>>>;
 
   /** changed 状态的缓存 */
   private _changedCache?: { draft: TDraft; defaultValues: TDraft | undefined; result: boolean };
@@ -73,6 +73,7 @@ export class CoreManager<TDraft extends Draft> {
     this.makeForm(optionsConfig);
     this.makeObservable();
     this.setupApplyEffects();
+    this.setupDebouncedApply();
   }
 
   // ==================== 初始化方法 ====================
@@ -86,6 +87,22 @@ export class CoreManager<TDraft extends Draft> {
     this.defaultValues = config.defaultValues;
     this.emitFn = config.emitFn;
     this.applyDebounceMs = config.applyDebounceMs;
+  }
+
+  /**
+   * 设置防抖版本的 apply 函数
+   * @internal
+   */
+  protected setupDebouncedApply(): void {
+    // 如果配置了防抖延迟，创建防抖版本的 apply 函数
+    if (this.applyDebounceMs && this.applyDebounceMs > 0) {
+      this.debouncedApply = debounce(
+        async () => {
+          await this.form.submit();
+        },
+        this.applyDebounceMs
+      );
+    }
   }
 
   /**
@@ -109,13 +126,9 @@ export class CoreManager<TDraft extends Draft> {
       values: config.values,
       ...config.formilyOptions,
     }) as Form;
-    
-    // 初始化 previousDraft 为当前表单值
-    if (config.values) {
-      this.previousDraft = cloneDeep(config.values) as TDraft;
-    } else if (this.defaultValues) {
-      this.previousDraft = cloneDeep(this.defaultValues);
-    }
+
+    // previousDraft 初始化为 undefined，第一次值变化时会传递 undefined 作为 prev
+    // 这样符合监听器的预期：第一次变化时 prev 应该是 undefined
   }
 
   /**
@@ -151,14 +164,18 @@ export class CoreManager<TDraft extends Draft> {
       // 监听提交成功
       onFormSubmitSuccess((form) => {
         const currentDraft = toJS(form.values) as TDraft;
+        const clonedCurrentDraft = cloneDeep(currentDraft);
         // 先设置 applied 为原始 draft（插件可能会在事件中修改它）
-        this.applied = cloneDeep(currentDraft);
-        const payload = cloneDeep(currentDraft);
-        
+        this.applied = clonedCurrentDraft;
+        const payload = clonedCurrentDraft;
+
+        // 更新 previousDraft 为 apply 时的状态，用于下次值变化时的 prev 参数
+        this.previousDraft = clonedCurrentDraft;
+
         // 触发事件，允许插件修改 applied
         this.listeners?.onApplySuccess?.({ draft: currentDraft, payload });
         this.emitFn?.('apply:success', { draft: currentDraft, payload });
-        
+
         // 注意：如果插件在事件中修改了 applied，修改后的值会保留
         // 这允许数据转换插件在 apply:success 时转换 applied 数据
       });
@@ -265,7 +282,6 @@ export class CoreManager<TDraft extends Draft> {
   ): void => {
     const plainObject = cloneDeep(values) as unknown as TDraft;
     this.defaultValues = plainObject;
-    // 清除 changed 缓存，因为 defaultValues 已变化
     this._changedCache = undefined;
     this.form.setInitialValues(plainObject, strategy);
   };
@@ -290,30 +306,12 @@ export class CoreManager<TDraft extends Draft> {
    * 如果配置了 applyDebounceMs，会自动防抖
    */
   apply = async (): Promise<void> => {
-    // 如果配置了防抖，先清除之前的定时器
-    if (this.applyDebounceTimer) {
-      clearTimeout(this.applyDebounceTimer);
-      this.applyDebounceTimer = undefined;
-    }
 
-    // 如果配置了防抖延迟
-    if (this.applyDebounceMs && this.applyDebounceMs > 0) {
-      return new Promise<void>((resolve, reject) => {
-        this.applyDebounceTimer = setTimeout(async () => {
-          try {
-            await this.form.submit();
-            resolve();
-          } catch (error) {
-            reject(error);
-          } finally {
-            this.applyDebounceTimer = undefined;
-          }
-        }, this.applyDebounceMs);
-      });
+    if (this.debouncedApply) {
+      await this.debouncedApply();
+      return;
     }
-
-    // 无防抖，直接执行
-    return this.form.submit();
+    await this.form.submit();
   };
 
   /**
@@ -352,16 +350,14 @@ export class CoreManager<TDraft extends Draft> {
    * @internal
    * 清理 CoreManager 内部引用，确保 Formily 实例正确卸载
    */
-  protected disposeCore(): void {
-    // 清除防抖定时器
-    if (this.applyDebounceTimer) {
-      clearTimeout(this.applyDebounceTimer);
-      this.applyDebounceTimer = undefined;
+  protected dispose(): void {
+    // 取消防抖函数（如果存在）
+    if (this.debouncedApply) {
+      this.debouncedApply.cancel();
+      this.debouncedApply = undefined;
     }
 
-    // 移除在 setupApplyEffects 中注册的副作用，避免心跳残留
     this.form.removeEffects('filter-apply');
-    // 根据 Formily 文档，调用 onUnmount 触发字段销毁与资源释放
     this.form.onUnmount();
 
     this.listeners = undefined;

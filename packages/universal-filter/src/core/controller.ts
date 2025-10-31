@@ -95,7 +95,7 @@ export class FilterController<TDraft extends Draft>
     const listeners = this.listeners;
 
     this.plugin.dispose();
-    this.disposeCore();
+    this.dispose();
 
     listeners?.onDestroy?.({ root: this });
     this._bus.emit('destroy', {});
