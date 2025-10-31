@@ -66,10 +66,14 @@ export interface Module<TDraft extends Draft = Draft, TOptions = unknown> {
 }
 
 export interface PluginInitContext<TDraft extends Draft = Draft> {
-  root: FilterApi<TDraft>;
-  bus: EventEmitter;
-  setReady(ready: boolean, error?: unknown): void;
-  isReady(): boolean;
+  /**
+   * Filter 实例，可以通过它访问所有 FilterApi 功能，包括事件总线（filter.on/off/once）
+   */
+  filter: FilterApi<TDraft>;
+  /**
+   * 插件管理器实例，可以通过它访问和设置插件状态、检查就绪状态等
+   */
+  pluginManager: PluginManager<TDraft>;
 }
 
 export interface Plugin<TDraft extends Draft = Draft> {

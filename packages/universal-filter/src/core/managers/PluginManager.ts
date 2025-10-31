@@ -7,6 +7,7 @@ import type {
   FilterEventMap,
 } from '../types';
 import type EventEmitter from 'eventemitter3';
+import { observable, define } from '@formily/reactive';
 
 /**
  * @name 插件管理器
@@ -24,13 +25,29 @@ import type EventEmitter from 'eventemitter3';
  * }
  * ```
  */
+/**
+ * 插件状态存储（响应式）
+ */
+export interface PluginState {
+  [key: string]: unknown;
+}
+
+/**
+ * 插件信息存储结构
+ */
+interface PluginInfo<TDraft extends Draft> {
+  plugin: Plugin<TDraft>;
+  state: PluginState;
+}
+
 export class PluginManager<TDraft extends Draft> {
   private plugins: Plugin<TDraft>[] = [];
   private readonly pluginReady = new Map<
     string,
     { ready: boolean; error?: unknown }
   >();
-  private readonly pluginMap = new Map<string, Plugin<TDraft>>();
+  /** 插件映射表：存储插件实例和状态 */
+  private readonly pluginMap = new Map<string, PluginInfo<TDraft>>();
 
   constructor(
     private bus: EventEmitter<FilterEventMap<TDraft>>,
@@ -40,11 +57,53 @@ export class PluginManager<TDraft extends Draft> {
     filterApi: FilterApi<TDraft>
   ) {
     // Phase 1: 合并全局插件和实例插件
-    const allFactories = mergeStrategy === 'prepend'
-      ? [...instancePlugins, ...globalPlugins]
-      : [...globalPlugins, ...instancePlugins];
+    const allFactories = this.mergePluginFactories(
+      instancePlugins,
+      globalPlugins,
+      mergeStrategy
+    );
 
     // Phase 2: 解析插件工厂函数
+    const plugins = this.resolvePluginFactories(allFactories, filterApi);
+
+    // Phase 3: 存储插件并初始化映射
+    this.initializePluginMap(plugins);
+
+    // Phase 4: 自动初始化插件
+    void this.runInit(filterApi);
+  }
+
+  /**
+   * @name mergePluginFactories
+   * @description 合并全局插件和实例插件工厂函数
+   * @param instancePlugins - 实例插件工厂函数列表
+   * @param globalPlugins - 全局插件工厂函数列表
+   * @param mergeStrategy - 合并策略：'prepend' 表示实例插件在前，'append' 表示全局插件在前
+   * @returns 合并后的插件工厂函数列表
+   * @protected
+   */
+  protected mergePluginFactories(
+    instancePlugins: PluginFactory<TDraft>[],
+    globalPlugins: PluginFactory<TDraft>[],
+    mergeStrategy: 'prepend' | 'append'
+  ): PluginFactory<TDraft>[] {
+    return mergeStrategy === 'prepend'
+      ? [...instancePlugins, ...globalPlugins]
+      : [...globalPlugins, ...instancePlugins];
+  }
+
+  /**
+   * @name resolvePluginFactories
+   * @description 解析插件工厂函数，将工厂函数转换为插件实例
+   * @param factories - 插件工厂函数列表
+   * @param filterApi - FilterApi 实例，用于传递给工厂函数
+   * @returns 解析后的插件实例列表
+   * @protected
+   */
+  protected resolvePluginFactories(
+    factories: PluginFactory<TDraft>[],
+    filterApi: FilterApi<TDraft>
+  ): Plugin<TDraft>[] {
     const plugins: Plugin<TDraft>[] = [];
     const helpers = {
       root: filterApi,
@@ -58,7 +117,7 @@ export class PluginManager<TDraft extends Draft> {
       }
     };
 
-    for (const factory of allFactories) {
+    for (const factory of factories) {
       if (typeof factory === 'function') {
         const result = factory(helpers);
         if (result) {
@@ -69,19 +128,53 @@ export class PluginManager<TDraft extends Draft> {
       }
     }
 
-    // Phase 3: 存储插件并初始化映射
+    return plugins;
+  }
+
+  /**
+   * @name initializePluginMap
+   * @description 初始化插件映射表和就绪状态
+   * @param plugins - 插件实例列表
+   * @protected
+   */
+  protected initializePluginMap(plugins: Plugin<TDraft>[]): void {
     this.plugins = plugins;
     this.pluginMap.clear();
     this.pluginReady.clear();
-    for (const p of this.plugins) {
-      this.pluginMap.set(p.name, p);
-      this.pluginReady.set(p.name, { ready: false });
-    }
 
-    // Phase 4: 自动初始化插件
-    void this.runInit(filterApi);
+    for (const plugin of this.plugins) {
+      // 初始化响应式状态对象
+      const state = observable({} as PluginState);
+      this.pluginMap.set(plugin.name, {
+        plugin,
+        state,
+      });
+      this.pluginReady.set(plugin.name, { ready: false });
+    }
   }
 
+  /**
+   * @name markReady
+   * @description 标记插件就绪状态（供插件内部调用）
+   * @param pluginName - 插件名称
+   * @param ready - 是否就绪
+   * @param error - 错误信息（可选）
+   * @internal
+   */
+  markReady(pluginName: string, ready: boolean, error?: unknown): void {
+    this.pluginReady.set(pluginName, { ready, error });
+    this.bus.emit('plugin:ready', { name: pluginName, ready, error });
+  }
+
+  /**
+   * @name isReady
+   * @description 检查指定插件是否就绪
+   * @param pluginName - 插件名称
+   * @returns 是否就绪
+   */
+  isReady(pluginName: string): boolean {
+    return this.pluginReady.get(pluginName)?.ready === true;
+  }
 
   /**
    * @name runInit
@@ -95,31 +188,20 @@ export class PluginManager<TDraft extends Draft> {
 
     // 按照插件注册顺序执行初始化
     for (const plugin of this.plugins) {
-      let invoked = false;
-      const markReady = (ready: boolean, error?: unknown) => {
-        invoked = true;
-        this.pluginReady.set(plugin.name, { ready, error });
-        this.bus.emit('plugin:ready', { name: plugin.name, ready, error });
-      };
-
       if (typeof plugin.onInit === 'function') {
         try {
           await plugin.onInit({
-            root: filter,
-            setReady: markReady,
-            bus: this.bus,
-            isReady: () => this.pluginReady.get(plugin.name)?.ready === true,
+            filter,
+            pluginManager: this,
           });
+          // 注意：markReady 的调用应该由插件自己决定，通过 pluginManager.markReady 调用
         } catch (error) {
-          markReady(false, error);
-          continue;
-        }
-
-        if (!invoked) {
-          markReady(true);
+          // 如果初始化过程中抛出异常，标记为未就绪
+          this.markReady(plugin.name, false, error);
         }
       } else {
-        markReady(true);
+        // 没有 onInit 的插件，默认标记为就绪
+        this.markReady(plugin.name, true);
       }
     }
     this.bus.emit('plugins:ready', { ready: this.ready });
@@ -157,4 +239,45 @@ export class PluginManager<TDraft extends Draft> {
   get ready(): boolean {
     return Array.from(this.pluginReady.values()).every(({ ready }) => ready);
   }
+
+  /**
+   * @name setState
+   * @description 设置指定插件的状态（响应式）
+   * @param pluginName - 插件名称
+   * @param state - 状态对象或更新函数
+   * @internal
+   */
+  setState<T = Record<string, unknown>>(
+    pluginName: string,
+    state: T | ((prev: T | undefined) => T)
+  ): void {
+    const pluginInfo = this.pluginMap.get(pluginName);
+    if (!pluginInfo) {
+      return;
+    }
+
+    const pluginState = pluginInfo.state;
+    if (typeof state === 'function') {
+      const updater = state as (prev: T | undefined) => T;
+      const prevState = pluginState as T | undefined;
+      const newState = updater(prevState);
+      // 使用 Object.assign 更新 observable 对象的属性，保持响应式
+      Object.assign(pluginState, newState);
+    } else {
+      // 直接合并状态对象
+      Object.assign(pluginState, state);
+    }
+  }
+
+  /**
+   * @name getState
+   * @description 获取指定插件的状态
+   * @param pluginName - 插件名称
+   * @returns 插件的状态对象
+   * @internal
+   */
+  getState<T = Record<string, unknown>>(pluginName: string): T | undefined {
+    return this.pluginMap.get(pluginName)?.state as T | undefined;
+  }
+
 }
