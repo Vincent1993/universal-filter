@@ -46,15 +46,15 @@ export function createUrlSyncPlugin<TDraft extends Draft = Draft>(
 
   const plugin: Plugin<TDraft> = {
     name: 'url-sync-plugin',
-    async onInit({ root, setReady }) {
+    async onInit({ filter, pluginManager }) {
       const search = parseFromUrl().query;
 
       if (search && Object.keys(search).length > 0 && syncToInitialValues) {
-        root.form.setValues(search as Partial<TDraft>, mergeStrategy);
-        root.setInitialValues(search as Partial<TDraft>, mergeStrategy);
+        filter.form.setValues(search as Partial<TDraft>, mergeStrategy);
+        filter.setInitialValues(search as Partial<TDraft>, mergeStrategy);
       }
 
-      setReady(true);
+      pluginManager.markReady(plugin.name, true);
     },
   };
   return plugin;

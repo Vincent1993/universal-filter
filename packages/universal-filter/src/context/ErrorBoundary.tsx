@@ -268,12 +268,6 @@ function DefaultErrorFallback({
           fontSize: '14px',
           transition: 'background-color 0.2s ease',
         }}
-        onMouseOver={(e) => {
-          e.currentTarget.style.backgroundColor = '#ff7875';
-        }}
-        onMouseOut={(e) => {
-          e.currentTarget.style.backgroundColor = '#ff4d4f';
-        }}
       >
         {isDevelopment ? '重置错误状态' : '重试'}
       </button>
