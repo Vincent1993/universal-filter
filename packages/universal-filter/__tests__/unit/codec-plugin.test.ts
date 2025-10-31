@@ -1,17 +1,17 @@
 /**
- * 数据模型转换插件测试
+ * codec 转换插件测试
  * 测试异步转换、多重转换链、错误处理等功能
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createFilter } from '../../src/core';
 import type { Draft } from '../../src/core/types';
 import {
-  createDataModelTransformPlugin,
+  createCodecTransformPlugin,
   createKeyTransformTransformer,
   createFieldMappingTransformer,
   createTransformFunctions,
   type TransformerConfig,
-} from '../../src/plugins/dataModelTransformPlugin';
+} from '../../src/plugins/codec/index';
 
 interface TestDraft extends Draft {
   firstName: string;
@@ -20,15 +20,15 @@ interface TestDraft extends Draft {
   emailAddress?: string;
 }
 
-describe('DataModelTransformPlugin', () => {
+describe('CodecTransformPlugin', () => {
   describe('基础功能', () => {
     it('应该能够创建插件实例', () => {
-      const plugin = createDataModelTransformPlugin({
+      const plugin = createCodecTransformPlugin({
         transformers: [],
       });
 
       expect(plugin).toBeDefined();
-      expect(plugin.name).toBe('data-model-transform-plugin');
+      expect(plugin.name).toBe('codec-plugin');
     });
 
     it('应该能够初始化插件', async () => {
@@ -39,7 +39,7 @@ describe('DataModelTransformPlugin', () => {
           userAge: 30,
         },
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers: [],
           }),
         ],
@@ -72,7 +72,7 @@ describe('DataModelTransformPlugin', () => {
           userAge: 30,
         },
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers: [transformer],
             applyOn: 'init',
           }),
@@ -99,7 +99,7 @@ describe('DataModelTransformPlugin', () => {
           userAge: 30,
         },
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers: [transformer],
             applyOn: 'init',
           }),
@@ -136,7 +136,7 @@ describe('DataModelTransformPlugin', () => {
           userAge: 30,
         },
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers: [asyncTransformer],
             applyOn: 'init',
           }),
@@ -174,7 +174,7 @@ describe('DataModelTransformPlugin', () => {
           userAge: 30,
         },
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers: [transformer1, transformer2],
             applyOn: 'init',
           }),
@@ -208,7 +208,7 @@ describe('DataModelTransformPlugin', () => {
           userAge: 30,
         },
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers: [transformer],
             applyOn: 'init',
           }),
@@ -241,7 +241,7 @@ describe('DataModelTransformPlugin', () => {
           userAge: 30,
         },
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers: [transformer],
             applyOn: 'init',
           }),
@@ -280,7 +280,7 @@ describe('DataModelTransformPlugin', () => {
           userAge: 30,
         },
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers,
             applyOn: 'init',
           }),
@@ -322,7 +322,7 @@ describe('DataModelTransformPlugin', () => {
           userAge: 30,
         },
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers,
             applyOn: 'init',
           }),
@@ -356,7 +356,7 @@ describe('DataModelTransformPlugin', () => {
           userAge: 30,
         },
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers: [transformer],
             applyOn: 'init',
           }),
@@ -386,7 +386,7 @@ describe('DataModelTransformPlugin', () => {
           userAge: 30,
         },
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers: [transformer],
             applyOn: 'apply',
           }),
@@ -446,7 +446,7 @@ describe('DataModelTransformPlugin', () => {
           userAge: 30,
         },
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers: [transformer],
             applyOn: 'init',
             onError: 'throw',
@@ -484,7 +484,7 @@ describe('DataModelTransformPlugin', () => {
           userAge: 30,
         },
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers,
             applyOn: 'init',
             onError: 'skip',
@@ -517,7 +517,7 @@ describe('DataModelTransformPlugin', () => {
           userAge: 30,
         },
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers: [transformer],
             applyOn: 'init',
             onError: 'fallback',
@@ -550,7 +550,7 @@ describe('DataModelTransformPlugin', () => {
           userAge: 30,
         },
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers: [transformer],
             applyOn: 'init',
             onError: 'skip',
@@ -584,7 +584,7 @@ describe('DataModelTransformPlugin', () => {
           userAge: 30,
         },
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers: [transformer],
             applyOn: 'init',
           }),
@@ -674,7 +674,7 @@ describe('DataModelTransformPlugin', () => {
           userAge: 30,
         },
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers: [transformer],
             applyOn: 'init',
             debug: true,
@@ -699,7 +699,7 @@ describe('DataModelTransformPlugin', () => {
 
       const filter = createFilter<TestDraft>({
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers: [transformer],
             applyOn: 'init',
           }),
@@ -801,7 +801,7 @@ describe('DataModelTransformPlugin', () => {
           userAge: 30,
         },
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers: [transformer],
             applyOn: 'init',
           }),
@@ -840,7 +840,7 @@ describe('DataModelTransformPlugin', () => {
           userAge: 30,
         },
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers,
             applyOn: 'init',
           }),
@@ -921,7 +921,7 @@ describe('DataModelTransformPlugin', () => {
           userAge: 30,
         },
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers: [],
           }),
         ],
@@ -960,7 +960,7 @@ describe('DataModelTransformPlugin', () => {
           userAge: 30,
         },
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers: [transformer],
             applyOn: 'apply',
           }),
@@ -1012,7 +1012,7 @@ describe('DataModelTransformPlugin', () => {
           userAge: 30,
         },
         plugins: [
-          createDataModelTransformPlugin({
+          createCodecTransformPlugin({
             transformers,
             applyOn: 'apply',
           }),
@@ -1034,6 +1034,513 @@ describe('DataModelTransformPlugin', () => {
       expect((filter.applied as any).step2).toBe(true);
 
       filter.dispose();
+    });
+  });
+
+  describe('性能测试', () => {
+    it('应该能够高效处理大量数据', async () => {
+      const largeData: any = {};
+      for (let i = 0; i < 1000; i++) {
+        largeData[`field${i}`] = `value${i}`;
+      }
+
+      const transformer: TransformerConfig = {
+        name: 'performance-transform',
+        transform: (data: any) => {
+          const result: any = {};
+          for (const [key, value] of Object.entries(data)) {
+            result[`transformed_${key}`] = value;
+          }
+          return result;
+        },
+      };
+
+      const startTime = Date.now();
+      const transformFunctions = createTransformFunctions([transformer]);
+      const result = await transformFunctions.transformInbound(largeData);
+      const endTime = Date.now();
+
+      expect(Object.keys(result as any).length).toBe(1000);
+      expect(endTime - startTime).toBeLessThan(100); // 应该在 100ms 内完成
+    });
+
+    it('应该能够高效处理长转换链', async () => {
+      const transformers: TransformerConfig[] = Array.from({ length: 50 }, (_, i) => ({
+        name: `step-${i}`,
+        transform: (data: any) => ({ ...data, [`step${i}`]: true }),
+      }));
+
+      const testData = { initial: 'data' };
+
+      const startTime = Date.now();
+      const transformFunctions = createTransformFunctions(transformers);
+      const result = await transformFunctions.transformInbound(testData);
+      const endTime = Date.now();
+
+      // 验证所有步骤都执行了
+      for (let i = 0; i < 50; i++) {
+        expect((result as any)[`step${i}`]).toBe(true);
+      }
+      expect(endTime - startTime).toBeLessThan(200); // 应该在 200ms 内完成
+    });
+
+    it('应该能够高效处理异步转换链', async () => {
+      const transformers: TransformerConfig[] = Array.from({ length: 20 }, (_, i) => ({
+        name: `async-step-${i}`,
+        transform: async (data: any) => {
+          await new Promise((resolve) => setTimeout(resolve, 1));
+          return { ...data, [`asyncStep${i}`]: true };
+        },
+      }));
+
+      const testData = { initial: 'data' };
+
+      const startTime = Date.now();
+      const transformFunctions = createTransformFunctions(transformers);
+      const result = await transformFunctions.transformInbound(testData);
+      const endTime = Date.now();
+
+      // 验证所有步骤都执行了
+      for (let i = 0; i < 20; i++) {
+        expect((result as any)[`asyncStep${i}`]).toBe(true);
+      }
+      // 异步操作应该有合理的总时间（每个 1ms，20 个至少 20ms）
+      expect(endTime - startTime).toBeGreaterThan(15);
+      expect(endTime - startTime).toBeLessThan(500); // 但不应超过 500ms
+    });
+
+    it('应该能够高效处理深度嵌套对象', async () => {
+      // 创建深度嵌套的对象（10 层）
+      const createNestedObject = (depth: number): any => {
+        if (depth === 0) {
+          return { value: 'leaf' };
+        }
+        return {
+          level: depth,
+          nested: createNestedObject(depth - 1),
+        };
+      };
+
+      const nestedData = createNestedObject(10);
+
+      const transformer: TransformerConfig = {
+        name: 'deep-transform',
+        transform: (data: any): any => {
+          if (data && typeof data === 'object' && !Array.isArray(data)) {
+            const result: any = {};
+            for (const [key, value] of Object.entries(data)) {
+              result[`transformed_${key}`] =
+                value && typeof value === 'object' ? transformer.transform(value) : value;
+            }
+            return result;
+          }
+          return data;
+        },
+      };
+
+      const startTime = Date.now();
+      const transformFunctions = createTransformFunctions([transformer]);
+      const result = await transformFunctions.transformInbound(nestedData);
+      const endTime = Date.now();
+
+      // 验证转换成功
+      expect((result as any).transformed_level).toBe(10);
+      expect((result as any).transformed_nested).toBeDefined();
+      expect(endTime - startTime).toBeLessThan(50); // 应该在 50ms 内完成
+    });
+
+    it('应该能够高效处理大型数组', async () => {
+      const largeArray = Array.from({ length: 1000 }, (_, i) => ({
+        id: i,
+        name: `Item ${i}`,
+        value: i * 2,
+      }));
+
+      const transformer: TransformerConfig = {
+        name: 'array-transform',
+        transform: (data: any) => {
+          if (Array.isArray(data)) {
+            return data.map((item) => ({ ...item, transformed: true }));
+          }
+          return data;
+        },
+      };
+
+      const startTime = Date.now();
+      const transformFunctions = createTransformFunctions([transformer]);
+      const result = await transformFunctions.transformInbound(largeArray);
+      const endTime = Date.now();
+
+      expect(Array.isArray(result)).toBe(true);
+      expect((result as any[]).length).toBe(1000);
+      expect((result as any[])[0].transformed).toBe(true);
+      expect(endTime - startTime).toBeLessThan(100); // 应该在 100ms 内完成
+    });
+
+    it('应该能够高效处理混合数据类型的复杂对象', async () => {
+      const complexData = {
+        string: 'test',
+        number: 123,
+        boolean: true,
+        null: null,
+        undefined: undefined,
+        array: [1, 2, 3],
+        nested: {
+          deep: {
+            deeper: {
+              value: 'deep value',
+            },
+          },
+        },
+        date: new Date(),
+      };
+
+      const transformer: TransformerConfig = {
+        name: 'complex-transform',
+        transform: (data: any) => {
+          if (data && typeof data === 'object' && !Array.isArray(data) && !(data instanceof Date)) {
+            const result: any = {};
+            for (const [key, value] of Object.entries(data)) {
+              result[`_${key}`] = value;
+            }
+            return result;
+          }
+          return data;
+        },
+      };
+
+      const startTime = Date.now();
+      const transformFunctions = createTransformFunctions([transformer]);
+      const result = await transformFunctions.transformInbound(complexData);
+      const endTime = Date.now();
+
+      expect((result as any)._string).toBe('test');
+      expect((result as any)._number).toBe(123);
+      expect((result as any)._nested).toBeDefined();
+      expect(endTime - startTime).toBeLessThan(50); // 应该在 50ms 内完成
+    });
+  });
+
+  describe('边界情况测试', () => {
+    it('应该能够处理循环引用（避免无限递归）', async () => {
+      const circularData: any = { name: 'test' };
+      circularData.self = circularData; // 创建循环引用
+
+      // 使用闭包来处理 visited Set
+      const visited = new WeakSet<any>();
+      const transformInternal = (data: any): any => {
+        if (data === null || typeof data !== 'object') {
+          return data;
+        }
+        if (visited.has(data)) {
+          return '[Circular]'; // 检测到循环引用
+        }
+        visited.add(data);
+        if (Array.isArray(data)) {
+          return data.map((item) => transformInternal(item));
+        }
+        const result: any = {};
+        for (const [key, value] of Object.entries(data)) {
+          result[key] = transformInternal(value);
+        }
+        return result;
+      };
+
+      const transformer: TransformerConfig = {
+        name: 'circular-transform',
+        transform: transformInternal,
+      };
+
+      const transformFunctions = createTransformFunctions([transformer]);
+      const result = await transformFunctions.transformInbound(circularData);
+
+      expect(result).toBeDefined();
+      expect((result as any).name).toBe('test');
+      // 循环引用应该被处理（可能是 '[Circular]' 或者被跳过）
+    });
+
+    it('应该能够处理包含特殊字符的键名', async () => {
+      const specialKeyData = {
+        'key-with-dash': 'value1',
+        'key.with.dot': 'value2',
+        'key with space': 'value3',
+        'key@with#special$chars': 'value4',
+        '中文键名': 'value5',
+        'キー名': 'value6',
+      };
+
+      const transformer: TransformerConfig = {
+        name: 'special-keys-transform',
+        transform: (data: any) => {
+          if (data && typeof data === 'object') {
+            const result: any = {};
+            for (const [key, value] of Object.entries(data)) {
+              result[`transformed_${key}`] = value;
+            }
+            return result;
+          }
+          return data;
+        },
+      };
+
+      const transformFunctions = createTransformFunctions([transformer]);
+      const result = await transformFunctions.transformInbound(specialKeyData);
+
+      expect((result as any)['transformed_key-with-dash']).toBe('value1');
+      expect((result as any)['transformed_key.with.dot']).toBe('value2');
+      expect((result as any)['transformed_中文键名']).toBe('value5');
+    });
+
+    it('应该能够处理空字符串和零值', async () => {
+      const edgeCaseData = {
+        emptyString: '',
+        zero: 0,
+        falseValue: false,
+        nullValue: null,
+        undefinedValue: undefined,
+      };
+
+      const transformer: TransformerConfig = {
+        name: 'edge-cases-transform',
+        transform: (data: any) => data,
+      };
+
+      const transformFunctions = createTransformFunctions([transformer]);
+      const result = await transformFunctions.transformInbound(edgeCaseData);
+
+      expect((result as any).emptyString).toBe('');
+      expect((result as any).zero).toBe(0);
+      expect((result as any).falseValue).toBe(false);
+      expect((result as any).nullValue).toBeNull();
+      expect((result as any).undefinedValue).toBeUndefined();
+    });
+
+    it('应该能够处理超大数字和极小数字', async () => {
+      const numberData = {
+        maxSafeInteger: Number.MAX_SAFE_INTEGER,
+        minSafeInteger: Number.MIN_SAFE_INTEGER,
+        infinity: Infinity,
+        negativeInfinity: -Infinity,
+        nan: NaN,
+        veryLarge: 1e100,
+        verySmall: 1e-100,
+      };
+
+      const transformer: TransformerConfig = {
+        name: 'number-transform',
+        transform: (data: any) => data,
+      };
+
+      const transformFunctions = createTransformFunctions([transformer]);
+      const result = await transformFunctions.transformInbound(numberData);
+
+      expect((result as any).maxSafeInteger).toBe(Number.MAX_SAFE_INTEGER);
+      expect((result as any).minSafeInteger).toBe(Number.MIN_SAFE_INTEGER);
+      expect((result as any).infinity).toBe(Infinity);
+      expect((result as any).negativeInfinity).toBe(-Infinity);
+      expect(Number.isNaN((result as any).nan)).toBe(true);
+    });
+
+    it('应该能够处理 Symbol 类型的值', async () => {
+      const symbol = Symbol('test');
+      const symbolData = {
+        symbolKey: symbol,
+        regularKey: 'value',
+      };
+
+      const transformer: TransformerConfig = {
+        name: 'symbol-transform',
+        transform: (data: any) => {
+          if (data && typeof data === 'object') {
+            const result: any = {};
+            for (const [key, value] of Object.entries(data)) {
+              result[key] = typeof value === 'symbol' ? value.toString() : value;
+            }
+            return result;
+          }
+          return data;
+        },
+      };
+
+      const transformFunctions = createTransformFunctions([transformer]);
+      const result = await transformFunctions.transformInbound(symbolData);
+
+      expect((result as any).symbolKey).toBeDefined();
+      expect((result as any).regularKey).toBe('value');
+    });
+
+    it('应该能够处理函数类型的值', async () => {
+      const functionData = {
+        fn: () => 'test',
+        regularKey: 'value',
+      };
+
+      const transformer: TransformerConfig = {
+        name: 'function-transform',
+        transform: (data: any) => {
+          if (data && typeof data === 'object') {
+            const result: any = {};
+            for (const [key, value] of Object.entries(data)) {
+              result[key] = typeof value === 'function' ? '[Function]' : value;
+            }
+            return result;
+          }
+          return data;
+        },
+      };
+
+      const transformFunctions = createTransformFunctions([transformer]);
+      const result = await transformFunctions.transformInbound(functionData);
+
+      expect((result as any).fn).toBe('[Function]');
+      expect((result as any).regularKey).toBe('value');
+    });
+
+    it('应该能够处理 Date 和 RegExp 对象', async () => {
+      const date = new Date('2023-01-01');
+      const regex = /test/g;
+      const objectData = {
+        date,
+        regex,
+        regularKey: 'value',
+      };
+
+      const transformer: TransformerConfig = {
+        name: 'object-types-transform',
+        transform: (data: any) => {
+          if (data && typeof data === 'object' && !Array.isArray(data)) {
+            const result: any = {};
+            for (const [key, value] of Object.entries(data)) {
+              if (value instanceof Date) {
+                result[key] = value.toISOString();
+              } else if (value instanceof RegExp) {
+                result[key] = value.toString();
+              } else {
+                result[key] = value;
+              }
+            }
+            return result;
+          }
+          return data;
+        },
+      };
+
+      const transformFunctions = createTransformFunctions([transformer]);
+      const result = await transformFunctions.transformInbound(objectData);
+
+      expect((result as any).date).toBe(date.toISOString());
+      expect((result as any).regex).toBe(regex.toString());
+      expect((result as any).regularKey).toBe('value');
+    });
+
+    it('应该能够处理条件函数抛出异常的情况', async () => {
+      const transformer: TransformerConfig = {
+        name: 'error-condition-transform',
+        condition: async () => {
+          throw new Error('条件检查失败');
+        },
+        transform: (data: any) => ({ ...data, transformed: true }),
+      };
+
+      const filter = createFilter<TestDraft>({
+        defaultValues: {
+          firstName: 'John',
+          lastName: 'Doe',
+          userAge: 30,
+        },
+        plugins: [
+          createCodecTransformPlugin({
+            transformers: [transformer],
+            applyOn: 'init',
+            onError: 'skip',
+          }),
+        ],
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // 条件函数抛出异常应该导致转换器被跳过
+      expect(filter.plugin.ready).toBe(true);
+      const draft = filter.draft;
+      expect((draft as any).transformed).toBeUndefined();
+      filter.dispose();
+    });
+
+    it('应该能够处理转换函数返回 undefined 的情况', async () => {
+      const transformer: TransformerConfig = {
+        name: 'undefined-transform',
+        transform: () => undefined,
+      };
+
+      const transformFunctions = createTransformFunctions([transformer]);
+      const result = await transformFunctions.transformInbound({ test: 'data' });
+
+      expect(result).toBeUndefined();
+    });
+
+    it('应该能够处理转换函数返回 null 的情况', async () => {
+      const transformer: TransformerConfig = {
+        name: 'null-transform',
+        transform: () => null,
+      };
+
+      const transformFunctions = createTransformFunctions([transformer]);
+      const result = await transformFunctions.transformInbound({ test: 'data' });
+
+      expect(result).toBeNull();
+    });
+
+    it('应该能够处理空转换器数组', async () => {
+      const filter = createFilter<TestDraft>({
+        defaultValues: {
+          firstName: 'John',
+          lastName: 'Doe',
+          userAge: 30,
+        },
+        plugins: [
+          createCodecTransformPlugin({
+            transformers: [],
+            applyOn: 'init',
+          }),
+        ],
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(filter.plugin.ready).toBe(true);
+      expect(filter.draft.firstName).toBe('John');
+      filter.dispose();
+    });
+
+    it('应该能够处理包含 getter/setter 的对象', async () => {
+      const objectWithGetter: any = {};
+      Object.defineProperty(objectWithGetter, 'computed', {
+        get() {
+          return 'computed value';
+        },
+        enumerable: true,
+      });
+
+      const transformer: TransformerConfig = {
+        name: 'getter-transform',
+        transform: (data: any) => {
+          if (data && typeof data === 'object') {
+            const result: any = {};
+            for (const key in data) {
+              if (Object.prototype.hasOwnProperty.call(data, key)) {
+                result[key] = data[key];
+              }
+            }
+            return result;
+          }
+          return data;
+        },
+      };
+
+      const transformFunctions = createTransformFunctions([transformer]);
+      const result = await transformFunctions.transformInbound(objectWithGetter);
+
+      expect((result as any).computed).toBe('computed value');
     });
   });
 });
