@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { ISchema } from '@formily/json-schema';
 import type { DynamicFieldsManager, UseDynamicFieldsOptions } from '../types';
 import { useFilterRegistry } from './useFilterRegistry';
@@ -43,103 +43,152 @@ export function useDynamicFields(
   const { filter, serverSchema, defaultFields = [] } = options;
   const registry = useFilterRegistry();
 
+  const normalizedDefaultFields = useMemo(() => {
+    const deduped: string[] = [];
+    const seen = new Set<string>();
+
+    defaultFields.forEach(fieldId => {
+      if (!fieldId || seen.has(fieldId)) {
+        return;
+      }
+      seen.add(fieldId);
+      deduped.push(fieldId);
+    });
+
+    return deduped;
+  }, [defaultFields]);
+
+  const { propertyEntries, componentToPropertyMap } = useMemo(() => {
+    const entries = Object.entries(serverSchema.properties ?? {});
+    const map = new Map<string, string[]>();
+
+    entries.forEach(([key, schema]) => {
+      const componentId = schema?.['x-component-id'];
+      if (!componentId) {
+        return;
+      }
+
+      const list = map.get(componentId);
+      if (list) {
+        list.push(key);
+      } else {
+        map.set(componentId, [key]);
+      }
+    });
+
+    return {
+      propertyEntries: entries as Array<[string, any]>,
+      componentToPropertyMap: map
+    };
+  }, [serverSchema]);
+
   // 当前激活的字段 ID 列表
-  const [activeFields, setActiveFields] = useState<string[]>(defaultFields);
+  const lastDefaultRef = useRef<string[]>(normalizedDefaultFields);
+
+  const [activeFields, setActiveFields] = useState<string[]>(normalizedDefaultFields);
+
+  useEffect(() => {
+    if (arrayShallowEqual(lastDefaultRef.current, normalizedDefaultFields)) {
+      return;
+    }
+
+    lastDefaultRef.current = normalizedDefaultFields;
+    setActiveFields(normalizedDefaultFields);
+  }, [normalizedDefaultFields]);
+
+  const cleanupFields = useCallback(
+    (fieldIds: Iterable<string>) => {
+      for (const fieldId of fieldIds) {
+        const propertyKeys = componentToPropertyMap.get(fieldId);
+        if (!propertyKeys) continue;
+
+        propertyKeys.forEach(key => {
+          filter.form.clearFormGraph(key);
+          filter.form.deleteValuesIn(key);
+        });
+      }
+    },
+    [componentToPropertyMap, filter]
+  );
 
   // 根据激活字段构建动态 Schema
   const activeSchema = useMemo<ISchema>(() => {
+    const activeSet = new Set(activeFields);
     const activeProperties: Record<string, any> = {};
 
-    // 遍历服务端 Schema，只保留激活字段
-    if (serverSchema.properties) {
-      Object.keys(serverSchema.properties).forEach(key => {
-        const fieldSchema = serverSchema.properties![key];
-        const componentId = fieldSchema['x-component-id'];
-
-        // 检查该字段是否在激活列表中
-        if (componentId && activeFields.includes(componentId)) {
-          activeProperties[key] = fieldSchema;
-        }
-      });
-    }
+    propertyEntries.forEach(([key, fieldSchema]) => {
+      const componentId = fieldSchema?.['x-component-id'];
+      if (componentId && activeSet.has(componentId)) {
+        activeProperties[key] = fieldSchema;
+      }
+    });
 
     return {
       ...serverSchema,
       properties: activeProperties
     };
-  }, [serverSchema, activeFields]);
+  }, [serverSchema, propertyEntries, activeFields]);
 
   // 获取可添加的字段配置列表
   const availableFields = useMemo(() => {
-    const allConfigs = registry.getAll();
-
-    // 过滤掉已激活的字段
-    return allConfigs.filter(config => !activeFields.includes(config.id));
+    const activeSet = new Set(activeFields);
+    return registry.getAll().filter(config => !activeSet.has(config.id));
   }, [registry, activeFields]);
 
   // 添加字段
   const addField = useCallback((fieldId: string) => {
-    if (!activeFields.includes(fieldId)) {
-      setActiveFields(prev => [...prev, fieldId]);
-    }
-  }, [activeFields]);
+    setActiveFields(prev => {
+      if (prev.includes(fieldId)) {
+        return prev;
+      }
+      return [...prev, fieldId];
+    });
+  }, []);
 
   // 删除字段
-  const removeField = useCallback((fieldId: string) => {
-    setActiveFields(prev => prev.filter(id => id !== fieldId));
-
-    // 清理对应的表单字段
-    // 需要找到该 fieldId 对应的字段名
-    if (serverSchema.properties) {
-      Object.keys(serverSchema.properties).forEach(key => {
-        const fieldSchema = serverSchema.properties![key];
-        if (fieldSchema['x-component-id'] === fieldId) {
-          // 清理 Formily 字段模型(防止内存泄漏)
-          filter.form.clearFormGraph(key);
-          // 删除字段值
-          filter.form.deleteValuesIn(key);
-        }
-      });
-    }
-  }, [filter, serverSchema]);
+  const removeField = useCallback(
+    (fieldId: string) => {
+      setActiveFields(prev => prev.filter(id => id !== fieldId));
+      cleanupFields([fieldId]);
+    },
+    [cleanupFields]
+  );
 
   // 重置为默认字段
   const resetFields = useCallback(() => {
-    setActiveFields(defaultFields);
-
-    // 清理非默认字段的值
-    if (serverSchema.properties) {
-      Object.keys(serverSchema.properties).forEach(key => {
-        const fieldSchema = serverSchema.properties![key];
-        const componentId = fieldSchema['x-component-id'];
-
-        if (componentId && !defaultFields.includes(componentId)) {
-          filter.form.clearFormGraph(key);
-          filter.form.deleteValuesIn(key);
-        }
-      });
+    const defaultSet = new Set(normalizedDefaultFields);
+    const toCleanup = activeFields.filter(id => !defaultSet.has(id));
+    if (toCleanup.length) {
+      cleanupFields(toCleanup);
     }
-  }, [defaultFields, filter, serverSchema]);
+
+    setActiveFields(normalizedDefaultFields);
+  }, [activeFields, cleanupFields, normalizedDefaultFields]);
 
   // 直接设置字段列表
-  const setFields = useCallback((fieldIds: string[]) => {
-    const removedFields = activeFields.filter(id => !fieldIds.includes(id));
+  const setFields = useCallback(
+    (fieldIds: string[]) => {
+      const deduped: string[] = [];
+      const seen = new Set<string>();
 
-    // 清理被移除字段的值
-    if (serverSchema.properties) {
-      Object.keys(serverSchema.properties).forEach(key => {
-        const fieldSchema = serverSchema.properties![key];
-        const componentId = fieldSchema['x-component-id'];
-
-        if (componentId && removedFields.includes(componentId)) {
-          filter.form.clearFormGraph(key);
-          filter.form.deleteValuesIn(key);
+      fieldIds.forEach(id => {
+        if (!id || seen.has(id)) {
+          return;
         }
+        seen.add(id);
+        deduped.push(id);
       });
-    }
 
-    setActiveFields(fieldIds);
-  }, [activeFields, filter, serverSchema]);
+      const nextSet = new Set(deduped);
+      const removed = activeFields.filter(id => !nextSet.has(id));
+      if (removed.length) {
+        cleanupFields(removed);
+      }
+
+      setActiveFields(deduped);
+    },
+    [activeFields, cleanupFields]
+  );
 
   return {
     activeFields,
@@ -151,4 +200,16 @@ export function useDynamicFields(
     setFields
   };
 }
+
+function arrayShallowEqual(a: string[], b: string[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 

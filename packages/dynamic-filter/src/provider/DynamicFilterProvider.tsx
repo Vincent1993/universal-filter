@@ -28,59 +28,99 @@ import type {
  * </DynamicFilterProvider>
  * ```
  */
+const EMPTY_SCOPE: Record<string, unknown> = Object.freeze({});
+
 export function DynamicFilterProvider(
   props: DynamicFilterProviderProps
 ): ReactElement {
   const {
     children,
     filterConfigs,
-    components,
-    scope = {},
+    components = {},
+    scope,
     autoInitPatch = true
   } = props;
+
+  const normalizedScope = useMemo(() => scope ?? EMPTY_SCOPE, [scope]);
 
   // 1. 创建注册表
   const registry = useMemo<FilterRegistry>(() => {
     const configMap = new Map<string, FilterFieldConfig>();
+    const categoryMap = new Map<string, FilterFieldConfig[]>();
+    const searchIndex: Array<{ config: FilterFieldConfig; tokens: string[] }> = [];
 
-    // 将配置数组转换为 Map
+    const seenIds = new Set<string>();
+
     filterConfigs.forEach(config => {
       if (!config.id) {
         console.warn('[Dynamic Filter] 配置缺少 id 字段，已跳过:', config);
         return;
       }
+
+      if (seenIds.has(config.id)) {
+        console.warn(
+          `[Dynamic Filter] 配置 id 重复，使用最后一次定义覆盖: ${config.id}`
+        );
+      }
+
+      seenIds.add(config.id);
       configMap.set(config.id, config);
     });
 
-    // 返回注册表对象，提供便捷的查询方法
+    const allConfigs = Object.freeze(Array.from(configMap.values()));
+
+    allConfigs.forEach(config => {
+      if (config.category) {
+        const normalizedCategory = config.category.trim().toLowerCase();
+        const list = categoryMap.get(normalizedCategory);
+        if (list) {
+          list.push(config);
+        } else {
+          categoryMap.set(normalizedCategory, [config]);
+        }
+      }
+
+      const tokens: string[] = [];
+      if (config.id) tokens.push(String(config.id).toLowerCase());
+      if (config.name) tokens.push(String(config.name).toLowerCase());
+      if (config.category) tokens.push(config.category.trim().toLowerCase());
+      searchIndex.push({ config, tokens });
+    });
+
+    const getAll = () => allConfigs.slice();
+
     return {
       configs: configMap,
 
       getById: (id: string) => configMap.get(id),
 
-      getAll: () => Array.from(configMap.values()),
+      getAll,
 
       getByCategory: (category: string) => {
-        return Array.from(configMap.values()).filter(
-          c => c.category === category
-        );
+        const normalized = category.trim().toLowerCase();
+        const list = categoryMap.get(normalized);
+        return list ? list.slice() : [];
       },
 
       search: (keyword: string) => {
-        const lowerKeyword = keyword.toLowerCase();
-        return Array.from(configMap.values()).filter(c =>
-          c.name.toLowerCase().includes(lowerKeyword) ||
-          c.id.toLowerCase().includes(lowerKeyword) ||
-          c.category?.toLowerCase().includes(lowerKeyword)
-        );
+        const normalizedKeyword = keyword.trim().toLowerCase();
+        if (!normalizedKeyword) {
+          return getAll();
+        }
+
+        return searchIndex
+          .filter(entry =>
+            entry.tokens.some(token => token.includes(normalizedKeyword))
+          )
+          .map(entry => entry.config);
       }
     };
   }, [filterConfigs]);
 
   // 2. 创建 SchemaField
   const SchemaField = useMemo(() => {
-    return createSchemaField({ components, scope });
-  }, [components, scope]);
+    return createSchemaField({ components, scope: normalizedScope });
+  }, [components, normalizedScope]);
 
   // 3. 注册 Schema Patch
   useEffect(() => {
