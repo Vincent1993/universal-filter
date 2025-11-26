@@ -3,8 +3,8 @@ import type { ISchema } from '@formily/json-schema';
 import type { ReactNode } from 'react';
 import type { CoreManager } from './managers';
 import type EventEmitter from 'eventemitter3';
-
 import type { PluginManager } from './managers/PluginManager';
+import type { OptionsRuntimeConfig } from './option-source';
 
 export type Draft = Record<string, any>;
 export type JsonRecord = Record<string, unknown>;
@@ -209,6 +209,7 @@ export interface FilterConfigureValue<TDraft extends Draft = Draft> {
     plugins?: 'prepend' | 'append';
     listeners?: 'shallow' | 'deep';
   };
+  options?: OptionsRuntimeConfig;
 }
 
 export interface FilterConfigureProps<TDraft extends Draft = Draft> {

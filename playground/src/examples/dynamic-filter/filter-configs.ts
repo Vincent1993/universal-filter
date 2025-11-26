@@ -1,8 +1,14 @@
-import type { FilterDefinition } from '@dfx/dynamic-filter';
+import type { FilterDefinition, OptionSourceConfig } from '@dfx/dynamic-filter';
 
 /**
  * 示例：全局筛选器定义列表
  * 每个定义都是一个独立字段的 Formily Schema
+ *
+ * 数据源支持：
+ * - static: 静态枚举（直接使用 enum）
+ * - remote-once: 首次加载时请求一次
+ * - remote-search: 关键字搜索
+ * - remote-depend: 依赖字段变化时刷新
  */
 export const FILTER_DEFINITIONS: FilterDefinition[] = [
   // ========== 搜索类筛选器 ==========
@@ -266,6 +272,106 @@ export const FILTER_DEFINITIONS: FilterDefinition[] = [
       tags: ['联动', '依赖'],
     },
   },
+
+  // ========== 远程数据源筛选器（useOptions 示例） ==========
+  {
+    id: 'filter:brand',
+    name: '品牌筛选',
+    category: 'enum',
+    type: 'string',
+    title: '品牌',
+    'x-component': 'Select',
+    'x-decorator': 'FormItem',
+    'x-component-props': {
+      placeholder: '选择品牌',
+      allowClear: true,
+      showSearch: true,
+    },
+    /**
+     * x-data-source 配置远程数据源
+     * 使用 useOptions Hook 自动获取数据
+     */
+    'x-data-source': {
+      strategy: 'remote-once',
+      trigger: 'mount',
+      queryKey: ['filters', 'brand-list'],
+      request: {
+        url: '/api/brands',
+        method: 'GET',
+      },
+      staleTime: 5 * 60 * 1000,
+      gcTime: 30 * 60 * 1000,
+    } as OptionSourceConfig,
+    metadata: {
+      description: '首次加载时从服务端获取品牌列表',
+      icon: 'Building2',
+      tags: ['远程', '品牌'],
+    },
+  },
+
+  // ========== 远程搜索筛选器 ==========
+  {
+    id: 'filter:sku',
+    name: 'SKU搜索',
+    category: 'search',
+    type: 'string',
+    title: 'SKU',
+    'x-component': 'Select',
+    'x-decorator': 'FormItem',
+    'x-component-props': {
+      placeholder: '搜索SKU',
+      allowClear: true,
+      showSearch: true,
+      filterOption: false, // 关闭本地过滤，使用远程搜索
+    },
+    'x-data-source': {
+      strategy: 'remote-search',
+      trigger: 'focus',
+      queryKey: ['filters', 'sku-search'],
+      request: {
+        url: '/api/skus/search',
+        method: 'GET',
+      },
+      searchDebounce: 300,
+      staleTime: 60 * 1000,
+    } as OptionSourceConfig,
+    metadata: {
+      description: '支持关键字搜索的SKU筛选器',
+      icon: 'Search',
+      tags: ['远程', '搜索', 'SKU'],
+    },
+  },
+
+  // ========== 依赖刷新筛选器 ==========
+  {
+    id: 'filter:warehouse',
+    name: '仓库筛选',
+    category: 'enum',
+    type: 'string',
+    title: '仓库',
+    'x-component': 'Select',
+    'x-decorator': 'FormItem',
+    'x-component-props': {
+      placeholder: '选择仓库',
+      allowClear: true,
+    },
+    'x-data-source': {
+      strategy: 'remote-depend',
+      trigger: 'mount',
+      queryKey: ['filters', 'warehouse-list'],
+      request: {
+        url: '/api/warehouses',
+        method: 'GET',
+      },
+      dependencies: ['regionFilter'], // 依赖地区筛选器
+      staleTime: 5 * 60 * 1000,
+    } as OptionSourceConfig,
+    metadata: {
+      description: '根据地区自动刷新仓库列表',
+      icon: 'Warehouse',
+      tags: ['远程', '依赖', '仓库'],
+    },
+  },
 ];
 
 /**
@@ -316,6 +422,18 @@ export const SERVER_SCHEMA = {
       'x-component-props': {
         placeholder: '根据渠道类型自动更新',
       },
+    },
+    // 品牌筛选器（远程数据源示例）
+    brandFilter: {
+      'x-filter-id': 'filter:brand',
+    },
+    // SKU搜索（远程搜索示例）
+    skuFilter: {
+      'x-filter-id': 'filter:sku',
+    },
+    // 仓库筛选（依赖地区刷新）
+    warehouseFilter: {
+      'x-filter-id': 'filter:warehouse',
     },
   },
 };

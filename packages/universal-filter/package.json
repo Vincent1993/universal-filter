@@ -40,13 +40,14 @@
     "@formily/reactive": "^2.3.7",
     "@formily/reactive-react": "^2.3.7",
     "@formily/shared": "^2.3.7",
-    "@tanstack/query-core": "^5.49.0",
+    "@tanstack/query-core": "^5.90.11",
     "es-toolkit": "^1.40.0",
     "eventemitter3": "^5.0.1",
     "query-string": "^9.3.1",
     "ts-mixer": "^6.0.4"
   },
   "devDependencies": {
+    "@tanstack/react-query": "^5.90.11",
     "@rslib/core": "^0.15.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",

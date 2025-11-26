@@ -21,6 +21,7 @@ import {
   useFilterRegistry,
   useSchemaField,
   useAssembledSchema,
+  withOptions,
 } from '@dfx/dynamic-filter';
 import {
   FormItem,
@@ -35,8 +36,10 @@ import {
   SERVER_SCHEMA,
 } from '../examples/dynamic-filter/filter-configs';
 import { PriceRangeInput } from '../examples/dynamic-filter/components/PriceRangeInput';
+import { RemoteSelect } from '../examples/dynamic-filter/components/RemoteSelect';
 import { PlusCircle, X, Search } from 'lucide-react';
 import { FormConsumer } from '@formily/react';
+
 
 // 配置查看组件
 function ConfigViewer({ title, config }: { title: string; config: any }) {
@@ -619,12 +622,17 @@ function DynamicFilterContent() {
 // 主页面组件
 function DynamicFilterPage() {
   return (
-    <div className="p-6">
+    <>
       <div className="mb-6">
         <h1 className="text-3xl font-bold">动态筛选器示例 (新架构)</h1>
         <p className="text-muted-foreground mt-2">
           基于 Schema Assembly & Projection 的 Headless 动态筛选器系统
         </p>
+        <div className="flex gap-2 mt-2">
+          <Badge variant="outline">支持远程数据源</Badge>
+          <Badge variant="outline">支持搜索</Badge>
+          <Badge variant="outline">支持依赖刷新</Badge>
+        </div>
       </div>
 
       <DynamicFilterProvider
@@ -633,16 +641,19 @@ function DynamicFilterPage() {
         components={{
           FormItem,
           Input: FormilyInput,
-          Select: FormilySelect,
+          // 使用 withOptions 包装 Select，使其自动支持 x-data-source
+          Select: withOptions(FormilySelect),
           DatePicker,
-          Cascader,
+          // Cascader 也支持 options，所以也包装一下
+          Cascader: withOptions(Cascader),
           PriceRangeInput,
+          RemoteSelect,
         }}
         scope={{}}
       >
         <DynamicFilterContent />
       </DynamicFilterProvider>
-    </div>
+    </>
   );
 }
 

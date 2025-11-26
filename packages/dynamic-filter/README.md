@@ -55,9 +55,9 @@ export const FILTER_DEFINITIONS: FilterDefinition[] = [
     id: 'filter:keyword',
     name: '关键词搜索',
     category: 'search',
-    type: 'string',
+      type: 'string',
     title: '关键词',
-    'x-component': 'Input',
+      'x-component': 'Input',
     'x-decorator': 'FormItem',
     'x-component-props': {
       placeholder: '请输入关键词',

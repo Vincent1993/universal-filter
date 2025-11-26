@@ -6,8 +6,9 @@ import type {
   FilterProviderProps,
   FilterConfigureProps,
   GlobalDefaults,
-  Draft
+  Draft,
 } from '../core/types';
+import type { OptionsRuntimeConfig } from '../core/option-source';
 
 // ==================== Constants ====================
 export const DEFAULT_NAMESPACE = '__default__';
@@ -28,6 +29,7 @@ interface ConfigureValue<TDraft extends Draft> {
     plugins: 'prepend' | 'append';
     listeners: 'shallow' | 'deep';
   };
+  options?: OptionsRuntimeConfig;
 }
 
 // ==================== Context ====================
@@ -44,6 +46,7 @@ const DEFAULT_CONFIGURE: ConfigureValue<any> = {
     plugins: 'append',
     listeners: 'shallow',
   },
+  options: undefined,
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -70,6 +73,7 @@ export function FilterConfigure<TDraft extends Draft = Draft>(
         plugins: value?.mergeStrategy?.plugins ?? DEFAULT_CONFIGURE.mergeStrategy.plugins,
         listeners: value?.mergeStrategy?.listeners ?? DEFAULT_CONFIGURE.mergeStrategy.listeners,
       },
+      options: value?.options ?? DEFAULT_CONFIGURE.options,
     };
   }, [value]);
 
