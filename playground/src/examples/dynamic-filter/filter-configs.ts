@@ -1,422 +1,166 @@
-import type { FilterFieldConfig } from '@dfx/dynamic-filter';
+import type { FilterDefinition } from '@dfx/dynamic-filter';
 
 /**
- * 示例：全局筛选器配置列表
- * 这些配置通常来自服务端或预定义的配置文件
+ * 示例：全局筛选器定义列表
+ * 每个定义都是一个独立字段的 Formily Schema
  */
-export const FILTER_CONFIGS: FilterFieldConfig[] = [
-  // 搜索类筛选器
+export const FILTER_DEFINITIONS: FilterDefinition[] = [
+  // ========== 搜索类筛选器 ==========
   {
     id: 'filter:keyword',
     name: '关键词搜索',
     category: 'search',
-    schema: {
-      type: 'string',
-      title: '关键词',
-      'x-component': 'Input',
-      'x-decorator': 'FormItem',
-      'x-component-props': {
-        placeholder: '请输入关键词',
-        allowClear: true,
-      },
+    type: 'string',
+    title: '关键词',
+    'x-component': 'Input',
+    'x-decorator': 'FormItem',
+    'x-component-props': {
+      placeholder: '请输入关键词',
+      allowClear: true,
     },
-    defaultValue: '',
     metadata: {
       description: '支持模糊搜索',
       icon: 'SearchOutlined',
       tags: ['搜索', '常用'],
     },
   },
-  {
-    id: 'filter:advanced-search',
-    name: '高级搜索',
-    category: 'search',
-    schema: {
-      type: 'object',
-      title: '高级搜索',
-      'x-component': 'FormGrid',
-      'x-component-props': {
-        minColumns: 2,
-        maxColumns: 2,
-      },
-      properties: {
-        field: {
-          type: 'string',
-          'x-decorator': 'FormItem',
-          'x-component': 'Select',
-          'x-component-props': {
-            placeholder: '搜索字段',
-          },
-          enum: [
-            { label: '标题', value: 'title' },
-            { label: '内容', value: 'content' },
-            { label: '作者', value: 'author' },
-            { label: '标签', value: 'tags' },
-          ],
-        },
-        value: {
-          type: 'string',
-          'x-decorator': 'FormItem',
-          'x-component': 'Input',
-          'x-component-props': {
-            placeholder: '搜索内容',
-            allowClear: true,
-          },
-        },
-      },
-    },
-    defaultValue: { field: '', value: '' },
-    metadata: {
-      description: '指定字段的高级搜索',
-      icon: 'SearchOutlined',
-      tags: ['搜索', '高级'],
-    },
-  },
 
-  // 状态和类型筛选器
+  // ========== 状态和类型筛选器 ==========
   {
     id: 'filter:status',
     name: '状态筛选',
     category: 'enum',
-    schema: {
-      type: 'string',
-      title: '状态',
-      'x-component': 'Select',
-      'x-decorator': 'FormItem',
-      'x-component-props': {
-        placeholder: '请选择状态',
-        allowClear: true,
-      },
-      enum: [
-        { label: '全部', value: '' },
-        { label: '启用', value: 'active' },
-        { label: '禁用', value: 'disabled' },
-        { label: '待审核', value: 'pending' },
-        { label: '已删除', value: 'deleted' },
-      ],
+    type: 'string',
+    title: '状态',
+    'x-component': 'Select',
+    'x-decorator': 'FormItem',
+    'x-component-props': {
+      placeholder: '请选择状态',
+      allowClear: true,
     },
-    defaultValue: '',
+    enum: [
+      { label: '全部', value: '' },
+      { label: '启用', value: 'active' },
+      { label: '禁用', value: 'disabled' },
+      { label: '待审核', value: 'pending' },
+      { label: '已删除', value: 'deleted' },
+    ],
     metadata: {
       description: '按状态筛选数据',
       icon: 'FilterOutlined',
       tags: ['状态', '常用'],
     },
   },
-  {
-    id: 'filter:type',
-    name: '类型筛选',
-    category: 'enum',
-    schema: {
-      type: 'string',
-      title: '类型',
-      'x-component': 'Select',
-      'x-decorator': 'FormItem',
-      'x-component-props': {
-        placeholder: '请选择类型',
-        allowClear: true,
-      },
-      enum: [
-        { label: '全部', value: '' },
-        { label: '文章', value: 'article' },
-        { label: '视频', value: 'video' },
-        { label: '图片', value: 'image' },
-        { label: '文档', value: 'document' },
-        { label: '链接', value: 'link' },
-      ],
-    },
-    defaultValue: '',
-    metadata: {
-      description: '按内容类型筛选',
-      icon: 'FileTextOutlined',
-      tags: ['类型', '内容'],
-    },
-  },
+
   {
     id: 'filter:category',
     name: '分类筛选',
     category: 'enum',
-    schema: {
-      type: 'array',
-      title: '分类',
-      'x-component': 'Select',
-      'x-decorator': 'FormItem',
-      'x-component-props': {
-        placeholder: '请选择分类',
-        allowClear: true,
-        mode: 'multiple',
-      },
-      enum: [
-        { label: '科技', value: 'tech' },
-        { label: '生活', value: 'life' },
-        { label: '娱乐', value: 'entertainment' },
-        { label: '教育', value: 'education' },
-        { label: '新闻', value: 'news' },
-        { label: '体育', value: 'sports' },
-      ],
+    type: 'array',
+    title: '分类',
+    default: ['tech'],
+    'x-component': 'Select',
+    'x-decorator': 'FormItem',
+    'x-component-props': {
+      placeholder: '请选择分类',
+      allowClear: true,
+      mode: 'multiple',
+      showSearch: true,
     },
-    defaultValue: [],
+    enum: [
+      { label: '科技', value: 'tech' },
+      { label: '生活', value: 'life' },
+      { label: '娱乐', value: 'entertainment' },
+      { label: '教育', value: 'education' },
+      { label: '新闻', value: 'news' },
+      { label: '体育', value: 'sports' },
+    ],
     metadata: {
-      description: '多选分类筛选',
+      description: '多选分类筛选（默认包含科技）',
       icon: 'AppstoreOutlined',
       tags: ['分类', '多选'],
     },
   },
-  {
-    id: 'filter:priority',
-    name: '优先级',
-    category: 'enum',
-    schema: {
-      type: 'string',
-      title: '优先级',
-      'x-component': 'Select',
-      'x-decorator': 'FormItem',
-      'x-component-props': {
-        placeholder: '选择优先级',
-        allowClear: false,
-      },
-      enum: [
-        { label: '紧急', value: 'urgent' },
-        { label: '高', value: 'high' },
-        { label: '中', value: 'medium' },
-        { label: '低', value: 'low' },
-      ],
-    },
-    defaultValue: 'medium',
-    metadata: {
-      description: '任务或内容的优先级',
-      icon: 'FlagOutlined',
-      tags: ['优先级'],
-    },
-  },
 
-  // 时间日期筛选器
+  // ========== 时间日期筛选器 ==========
   {
     id: 'filter:date-range',
     name: '日期范围',
     category: 'date',
-    schema: {
-      type: 'array',
-      title: '日期范围',
-      'x-component': 'DatePicker.RangePicker',
-      'x-decorator': 'FormItem',
-      'x-component-props': {
-        placeholder: ['开始日期', '结束日期'],
-        format: 'YYYY-MM-DD',
-      },
+    type: 'array',
+    title: '日期范围',
+    'x-component': 'DatePicker.RangePicker',
+    'x-decorator': 'FormItem',
+    'x-component-props': {
+      placeholder: ['开始日期', '结束日期'],
+      format: 'YYYY-MM-DD',
     },
-    defaultValue: null,
     metadata: {
       description: '选择日期范围进行筛选',
       icon: 'CalendarOutlined',
       tags: ['时间', '范围'],
     },
   },
-  {
-    id: 'filter:create-time',
-    name: '创建时间',
-    category: 'date',
-    schema: {
-      type: 'string',
-      title: '创建时间',
-      'x-component': 'DatePicker',
-      'x-decorator': 'FormItem',
-      'x-component-props': {
-        placeholder: '选择创建日期',
-        format: 'YYYY-MM-DD',
-      },
-    },
-    defaultValue: null,
-    metadata: {
-      description: '按创建时间筛选',
-      icon: 'CalendarOutlined',
-      tags: ['时间', '创建'],
-    },
-  },
-  {
-    id: 'filter:update-time',
-    name: '更新时间',
-    category: 'date',
-    schema: {
-      type: 'array',
-      title: '更新时间范围',
-      'x-component': 'DatePicker.RangePicker',
-      'x-decorator': 'FormItem',
-      'x-component-props': {
-        placeholder: ['更新开始', '更新结束'],
-        format: 'YYYY-MM-DD HH:mm:ss',
-        showTime: true,
-      },
-    },
-    defaultValue: null,
-    metadata: {
-      description: '按最后更新时间筛选',
-      icon: 'ClockCircleOutlined',
-      tags: ['时间', '更新'],
-    },
-  },
 
-  // 数值范围筛选器
+  // ========== 数值范围筛选器（自定义组件示例） ==========
   {
     id: 'filter:price-range',
     name: '价格范围',
     category: 'number',
-    schema: {
-      type: 'object',
-      title: '价格范围',
-      'x-component': 'FormGrid',
-      'x-component-props': {
-        minColumns: 2,
-        maxColumns: 2,
-      },
-      properties: {
-        min: {
-          type: 'number',
-          'x-decorator': 'FormItem',
-          'x-component': 'InputNumber',
-          'x-component-props': {
-            placeholder: '最低价',
-            min: 0,
-            precision: 2,
-            style: { width: '100%' },
-          },
-        },
-        max: {
-          type: 'number',
-          'x-decorator': 'FormItem',
-          'x-component': 'InputNumber',
-          'x-component-props': {
-            placeholder: '最高价',
-            min: 0,
-            precision: 2,
-            style: { width: '100%' },
-          },
-        },
-      },
+    type: 'array',
+    title: '价格范围',
+    'x-component': 'PriceRangeInput',
+    'x-decorator': 'FormItem',
+    'x-component-props': {
+      placeholder: ['最低价', '最高价'],
+      precision: 2,
     },
-    defaultValue: { min: null, max: null },
     metadata: {
-      description: '设置价格范围',
+      description: '通过自定义组件输入价格区间',
       icon: 'DollarOutlined',
-      tags: ['数值', '范围'],
-    },
-  },
-  {
-    id: 'filter:score-range',
-    name: '评分范围',
-    category: 'number',
-    schema: {
-      type: 'array',
-      title: '评分范围',
-      'x-component': 'Slider',
-      'x-decorator': 'FormItem',
-      'x-component-props': {
-        range: true,
-        min: 0,
-        max: 10,
-        step: 0.5,
-        marks: {
-          0: '0',
-          2.5: '2.5',
-          5: '5',
-          7.5: '7.5',
-          10: '10',
-        },
-      },
-    },
-    defaultValue: [0, 10],
-    metadata: {
-      description: '按评分范围筛选',
-      icon: 'StarOutlined',
-      tags: ['数值', '评分'],
-    },
-  },
-  {
-    id: 'filter:count-range',
-    name: '数量范围',
-    category: 'number',
-    schema: {
-      type: 'object',
-      title: '数量范围',
-      'x-component': 'FormGrid',
-      'x-component-props': {
-        minColumns: 2,
-        maxColumns: 2,
-      },
-      properties: {
-        min: {
-          type: 'number',
-          'x-decorator': 'FormItem',
-          'x-component': 'InputNumber',
-          'x-component-props': {
-            placeholder: '最小数量',
-            min: 0,
-            style: { width: '100%' },
-          },
-        },
-        max: {
-          type: 'number',
-          'x-decorator': 'FormItem',
-          'x-component': 'InputNumber',
-          'x-component-props': {
-            placeholder: '最大数量',
-            min: 0,
-            style: { width: '100%' },
-          },
-        },
-      },
-    },
-    defaultValue: { min: null, max: null },
-    metadata: {
-      description: '按数量范围筛选',
-      icon: 'NumberOutlined',
-      tags: ['数值', '数量'],
+      tags: ['数值', '范围', '自定义组件'],
     },
   },
 
-  // 其他筛选器
+  // ========== 标签筛选器 ==========
   {
     id: 'filter:tags',
     name: '标签筛选',
     category: 'enum',
-    schema: {
-      type: 'array',
-      title: '标签',
-      'x-component': 'Select',
-      'x-decorator': 'FormItem',
-      'x-component-props': {
-        placeholder: '选择标签',
-        allowClear: true,
-        mode: 'tags',
-      },
-      enum: [
-        { label: '热门', value: 'hot' },
-        { label: '推荐', value: 'recommended' },
-        { label: '新品', value: 'new' },
-        { label: '限时', value: 'limited' },
-        { label: '促销', value: 'promotion' },
-      ],
+    type: 'array',
+    title: '标签',
+    'x-component': 'Select',
+    'x-decorator': 'FormItem',
+    'x-component-props': {
+      placeholder: '选择标签',
+      allowClear: true,
+      mode: 'tags',
     },
-    defaultValue: [],
+    enum: [
+      { label: '热门', value: 'hot' },
+      { label: '推荐', value: 'recommended' },
+      { label: '新品', value: 'new' },
+    ],
     metadata: {
       description: '按标签筛选，支持自定义标签',
       icon: 'TagsOutlined',
       tags: ['标签', '自定义'],
     },
   },
+
+  // ========== 地区筛选器 (级联) ==========
   {
     id: 'filter:region',
     name: '地区筛选',
     category: 'location',
-    schema: {
-      type: 'object',
-      title: '地区',
-      'x-component': 'Cascader',
-      'x-decorator': 'FormItem',
-      'x-component-props': {
-        placeholder: '选择地区',
-        allowClear: true,
-      },
-      enum: [
+    type: 'array',
+    title: '地区',
+    'x-component': 'Cascader',
+    'x-decorator': 'FormItem',
+    'x-component-props': {
+      placeholder: '选择地区',
+      allowClear: true,
+      options: [
         {
           label: '中国',
           value: 'china',
@@ -424,7 +168,6 @@ export const FILTER_CONFIGS: FilterFieldConfig[] = [
             { label: '北京', value: 'beijing' },
             { label: '上海', value: 'shanghai' },
             { label: '广州', value: 'guangzhou' },
-            { label: '深圳', value: 'shenzhen' },
           ],
         },
         {
@@ -433,61 +176,146 @@ export const FILTER_CONFIGS: FilterFieldConfig[] = [
           children: [
             { label: '纽约', value: 'newyork' },
             { label: '洛杉矶', value: 'losangeles' },
-            { label: '旧金山', value: 'sanfrancisco' },
           ],
         },
       ],
     },
-    defaultValue: null,
     metadata: {
       description: '按地区进行筛选',
       icon: 'EnvironmentOutlined',
-      tags: ['地区', '位置'],
+      tags: ['地区', '位置', '级联'],
+    },
+  },
+
+  // ========== 渠道筛选（带默认值） ==========
+  {
+    id: 'filter:channel-type',
+    name: '渠道类型',
+    category: 'enum',
+    type: 'string',
+    title: '渠道类型',
+    default: 'all',
+    'x-component': 'Select',
+    'x-decorator': 'FormItem',
+    'x-component-props': {
+      placeholder: '选择渠道类型',
+      allowClear: true,
+    },
+    enum: [
+      { label: '全部渠道', value: 'all' },
+      { label: '线上渠道', value: 'online' },
+      { label: '线下渠道', value: 'offline' },
+    ],
+    metadata: {
+      description: '包含默认值的渠道类型筛选',
+      icon: 'Share2',
+      tags: ['默认值', '渠道'],
+    },
+  },
+
+  // ========== 渠道明细（联动示例） ==========
+  {
+    id: 'filter:channel-detail',
+    name: '渠道明细',
+    category: 'enum',
+    type: 'string',
+    title: '渠道明细',
+    'x-component': 'Select',
+    'x-decorator': 'FormItem',
+    'x-component-props': {
+      placeholder: '先选择渠道类型再选择明细',
+      allowClear: true,
+    },
+    /**
+     * 通过 x-reactions 监听 channelFilter 字段（布局中定义的字段 key）
+     * 根据渠道类型动态切换 options，并在渠道重置时清空当前值
+     */
+    'x-reactions': [
+      {
+        dependencies: ['channelFilter'],
+        fulfill: {
+          state: {
+            enum: `{{
+              ($deps[0] ?? 'all') === 'offline'
+                ? [
+                    { label: '直营门店', value: 'store-direct' },
+                    { label: '加盟门店', value: 'store-franchise' },
+                    { label: '仓配中心', value: 'warehouse' }
+                  ]
+                : ($deps[0] ?? 'all') === 'online'
+                ? [
+                    { label: '官网', value: 'official-site' },
+                    { label: '小程序', value: 'mini-program' },
+                    { label: '电商平台', value: 'marketplace' }
+                  ]
+                : [
+                    { label: '不限', value: 'all' }
+                  ]
+            }}`,
+            value: `{{ $deps[0] === 'all' ? 'all' : $self.value }}`,
+          },
+        },
+      },
+    ],
+    enum: [
+      { label: '不限', value: 'all' },
+    ],
+    metadata: {
+      description: '依赖渠道类型的级联联动示例',
+      icon: 'Link2',
+      tags: ['联动', '依赖'],
     },
   },
 ];
 
 /**
- * 模拟服务端返回的 Schema
- * 只包含字段标识和可能的覆盖配置
+ * 模拟服务端返回的 Schema Layout
+ * 使用 x-filter-id 引用全局定义，并可以覆盖部分配置
  */
 export const SERVER_SCHEMA = {
   type: 'object',
   properties: {
-    keyword: {
-      'x-component-id': 'filter:keyword',
+    // 引用关键词筛选器
+    keywordFilter: {
+      'x-filter-id': 'filter:keyword',
     },
-    status: {
-      'x-component-id': 'filter:status',
-      // 可以在这里覆盖全局配置
+    // 引用状态筛选器
+    statusFilter: {
+      'x-filter-id': 'filter:status',
       'x-component-props': {
-        placeholder: '选择用户状态',
+        placeholder: '选择用户状态1',
       },
     },
-    dateRange: {
-      'x-component-id': 'filter:date-range',
+    // 引用日期范围筛选器
+    dateRangeFilter: {
+      'x-filter-id': 'filter:date-range',
     },
-    category: {
-      'x-component-id': 'filter:category',
+    // 引用分类筛选器
+    categoryFilter: {
+      'x-filter-id': 'filter:category',
     },
-    priority: {
-      'x-component-id': 'filter:priority',
+    // 引用价格范围筛选器（自定义组件）
+    priceRangeFilter: {
+      'x-filter-id': 'filter:price-range',
     },
-    type: {
-      'x-component-id': 'filter:type',
+    // 引用标签筛选器
+    tagsFilter: {
+      'x-filter-id': 'filter:tags',
     },
-    createTime: {
-      'x-component-id': 'filter:create-time',
+    // 引用地区筛选器
+    regionFilter: {
+      'x-filter-id': 'filter:region',
     },
-    tags: {
-      'x-component-id': 'filter:tags',
+    // 渠道类型筛选器（带默认值）
+    channelFilter: {
+      'x-filter-id': 'filter:channel-type',
     },
-    priceRange: {
-      'x-component-id': 'filter:price-range',
-    },
-    region: {
-      'x-component-id': 'filter:region',
+    // 渠道明细（依赖 channelFilter）
+    channelDetailFilter: {
+      'x-filter-id': 'filter:channel-detail',
+      'x-component-props': {
+        placeholder: '根据渠道类型自动更新',
+      },
     },
   },
 };
-

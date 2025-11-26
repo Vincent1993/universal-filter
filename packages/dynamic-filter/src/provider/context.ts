@@ -1,5 +1,6 @@
 import { createContext } from 'react';
 import type { FilterRegistry } from '../types';
+import type { ISchema } from '@formily/json-schema';
 
 /**
  * 动态筛选器 Context 值
@@ -9,6 +10,8 @@ export interface DynamicFilterContextValue {
   registry: FilterRegistry;
   /** 已注册的 SchemaField 组件 */
   SchemaField: any;
+  /** 组装后的完整 Schema (Registry + Layout) */
+  assembledSchema?: ISchema;
 }
 
 /**
@@ -18,4 +21,3 @@ export interface DynamicFilterContextValue {
 export const DynamicFilterContext = createContext<DynamicFilterContextValue | null>(null);
 
 DynamicFilterContext.displayName = 'DynamicFilterContext';
-

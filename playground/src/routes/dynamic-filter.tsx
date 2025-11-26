@@ -17,24 +17,24 @@ import { Input } from '@/components/ui/input';
 import { createFilter, FilterProvider } from '@dfx/universal-filter';
 import {
   DynamicFilterProvider,
-  useDynamicFields,
+  useDynamicFilters,
   useFilterRegistry,
   useSchemaField,
+  useAssembledSchema,
 } from '@dfx/dynamic-filter';
 import {
   FormItem,
   Input as FormilyInput,
   DatePicker,
-  FormGrid,
   Select as FormilySelect,
   Cascader,
 } from '@formily/antd-v5';
-import { FormilySelect as FormilyCustomSelect } from '@/components/formily-select';
 import { FilterStateViewer } from '@/components/filter-state-viewer';
 import {
-  FILTER_CONFIGS,
+  FILTER_DEFINITIONS,
   SERVER_SCHEMA,
 } from '../examples/dynamic-filter/filter-configs';
+import { PriceRangeInput } from '../examples/dynamic-filter/components/PriceRangeInput';
 import { PlusCircle, X, Search } from 'lucide-react';
 import { FormConsumer } from '@formily/react';
 
@@ -50,116 +50,13 @@ function ConfigViewer({ title, config }: { title: string; config: any }) {
   );
 }
 
-// 值格式化工具（用于胶囊展示）
-function formatValueForChip(value: any): string {
-  if (value === null || value === undefined || value === '') return '';
-  if (Array.isArray(value)) {
-    if (value.length === 0) return '';
-    const parts = value.map((v) =>
-      typeof v === 'object' && v !== null && 'format' in (v as any)
-        ? (v as any).format?.('YYYY-MM-DD') ?? String(v)
-        : String(v)
-    );
-    return parts.join(' - ');
-  }
-  if (typeof value === 'object') {
-    const keys = Object.keys(value);
-    if (keys.length === 0) return '';
-    const min = (value as any).min ?? (value as any)[keys[0]];
-    const max = (value as any).max ?? (value as any)[keys[1]];
-    if (min !== undefined || max !== undefined) {
-      const minText = min ?? '';
-      const maxText = max ?? '';
-      return `${minText} - ${maxText}`;
-    }
-    return JSON.stringify(value);
-  }
-  return String(value);
-}
-
-// 胶囊筛选条
-function ChipsBar({
-  activeFields,
-  serverSchema,
-  onClearField,
-  onReset,
-}: {
-  activeFields: string[];
-  serverSchema: any;
-  onClearField: (fieldKey: string) => void;
-  onReset: () => void;
-}) {
-  return (
-    <Tabs className="w-full" defaultValue="chips">
-      <TabsContent value="chips" className="m-0">
-        <div className="flex flex-wrap gap-3">
-          {activeFields.map((fieldId) => {
-            const entry = Object.entries(serverSchema.properties || {}).find(
-              ([, s]: [string, any]) => s['x-component-id'] === fieldId
-            );
-            if (!entry) return null;
-            const [fieldKey] = entry;
-
-            return (
-              <FormConsumer key={fieldKey}>
-                {(form) => {
-                  const raw = form?.values ? (form.values as any)[fieldKey] : undefined;
-                  const text = formatValueForChip(raw);
-                  const isEmpty = !text;
-                  return (
-                    <div
-                      className={
-                        'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm ' +
-                        (isEmpty
-                          ? 'border-dashed text-muted-foreground bg-background'
-                          : 'border-muted bg-card shadow-sm')
-                      }
-                    >
-                      <span className="whitespace-nowrap select-none">
-                        {isEmpty ? (
-                          <span className="inline-flex items-center gap-1">
-                            <PlusCircle className="h-3.5 w-3.5" />
-                            {fieldKey}
-                          </span>
-                        ) : (
-                          text
-                        )}
-                      </span>
-                      {!isEmpty && (
-                        <button
-                          className="rounded-full hover:bg-muted px-1.5 py-0.5 text-xs"
-                          onClick={() => onClearField(fieldKey)}
-                          aria-label="清空此筛选"
-                        >
-                          ×
-                        </button>
-                      )}
-                    </div>
-                  );
-                }}
-              </FormConsumer>
-            );
-          })}
-
-          <button
-            className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm hover:bg-muted"
-            onClick={onReset}
-          >
-            × Reset
-          </button>
-        </div>
-      </TabsContent>
-    </Tabs>
-  );
-}
-
 // 筛选器分组和搜索组件
 function FilterSelector({
   onSelect,
-  availableFields,
+  availableFilters,
 }: {
-  onSelect: (fieldId: string) => void;
-  availableFields: any[];
+  onSelect: (filterId: string) => void;
+  availableFilters: any[];
 }) {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -173,16 +70,16 @@ function FilterSelector({
       location: { label: '📍 位置', items: [] as any[] },
     };
 
-    availableFields.forEach((field) => {
+    availableFilters.forEach((f) => {
       const group =
-        groups[field.category as keyof typeof groups] || groups.enum;
-      group.items.push(field);
+        groups[f.category as keyof typeof groups] || groups.enum;
+      group.items.push(f);
     });
 
     return Object.entries(groups).filter(
       ([_, group]) => group.items.length > 0
     );
-  }, [availableFields]);
+  }, [availableFilters]);
 
   // 搜索过滤
   const filteredGroups = useMemo(() => {
@@ -265,68 +162,68 @@ function DynamicFilterContent() {
     string | null
   >(null);
 
-  // 2. 使用动态字段管理
+  // 2. 获取组装后的 Schema
+  const assembledSchema = useAssembledSchema();
+
+  // 3. 使用动态筛选器管理
   const {
-    activeFields,
+    activeFilters,
     activeSchema,
-    availableFields,
-    addField,
-    removeField,
-    resetFields,
-  } = useDynamicFields({
+    availableFilters,
+    addFilter,
+    removeFilter,
+    resetFilters,
+  } = useDynamicFilters({
     filter,
-    serverSchema: SERVER_SCHEMA,
-    defaultFields: ['filter:keyword', 'filter:status', 'filter:category'], // 默认显示关键词、状态和分类
+    assembledSchema: assembledSchema!,
+    defaultFilters: ['filter:keyword', 'filter:status', 'filter:category'], // 默认显示关键词、状态和分类
   });
 
-  // 3. 获取注册表和 SchemaField
+  // 4. 获取注册表和 SchemaField
   const registry = useFilterRegistry();
   const SchemaField = useSchemaField();
 
-  // 获取选中字段的配置信息
-  const getFieldConfigs = (fieldId: string) => {
-    const globalConfig = registry.getById(fieldId);
-    if (!globalConfig) return null;
+  // 获取选中筛选器的配置信息
+  const getFilterConfigs = (filterId: string) => {
+    const definition = registry.getById(filterId);
+    if (!definition) return null;
 
     // 找到对应的服务端 Schema 字段
     const serverFieldEntry = Object.entries(
       SERVER_SCHEMA.properties || {}
     ).find(
-      ([_, schema]: [string, any]) => schema['x-component-id'] === fieldId
+      ([_, schema]: [string, any]) => (schema as any)['x-filter-id'] === filterId
     );
 
     if (!serverFieldEntry) return null;
 
     const [fieldKey, serverFieldSchema] = serverFieldEntry;
 
-    // 1. 全局配置（完整的 schema）
-    const globalSchema = {
-      type: 'object',
-      properties: {
-        [fieldKey]: globalConfig.schema,
-      },
-    };
+    // 1. 全局定义
+    const globalSchema = definition;
 
-    // 2. 服务端配置（完整的 schema，包含 x-component-id）
-    const serverSchema = {
-      type: 'object',
-      properties: {
-        [fieldKey]: { ...serverFieldSchema },
-      },
-    };
+    // 2. 服务端配置
+    const serverSchema = serverFieldSchema;
 
-    // 3. 合并后的配置（从 activeSchema 中提取）
+    // 3. 合并后的配置（从 activeSchema 中提取筛选器的所有字段）
+    const filterFields: Record<string, any> = {};
+    if (activeSchema.properties) {
+      Object.keys(activeSchema.properties).forEach(key => {
+        const field = (activeSchema.properties as any)[key];
+        if (field['x-filter-id'] === filterId) {
+          filterFields[key] = field;
+        }
+      });
+    }
+
     const mergedSchema = {
       type: 'object',
-      properties: {
-        [fieldKey]: activeSchema.properties?.[fieldKey],
-      },
+      properties: filterFields,
     };
 
-    // 提取纯粹的覆盖部分（去除 x-component-id 和 x-field-name）
+    // 提取纯粹的覆盖部分
     const serverOverride = { ...serverFieldSchema };
-    delete serverOverride['x-component-id'];
-    delete serverOverride['x-field-name'];
+    delete (serverOverride as any)['x-filter-id'];
 
     return {
       fieldKey,
@@ -338,39 +235,22 @@ function DynamicFilterContent() {
     };
   };
 
-  // 获取所有字段的配置概览
-  const getAllFieldsConfig = () => {
-    const allFields = [...activeFields, ...availableFields.map((f) => f.id)];
-    return allFields
-      .map((fieldId) => {
-        const config = registry.getById(fieldId);
-        const isActive = activeFields.includes(fieldId);
+  // 获取所有筛选器的配置概览
+  const getAllFiltersConfig = () => {
+    const allFilters = [...activeFilters, ...availableFilters.map((f) => f.id)];
+    return allFilters
+      .map((filterId) => {
+        const definition = registry.getById(filterId);
+        const isActive = activeFilters.includes(filterId);
 
-        if (!config) return null;
-
-        const serverFieldEntry = Object.entries(
-          SERVER_SCHEMA.properties || {}
-        ).find(
-          ([_, schema]: [string, any]) => schema['x-component-id'] === fieldId
-        );
+        if (!definition) return null;
 
         return {
-          fieldId,
-          fieldKey: serverFieldEntry?.[0],
-          name: config.name,
-          category: config.category,
+          filterId,
+          name: definition.name,
+          category: definition.category,
           isActive,
-          hasServerOverride: serverFieldEntry
-            ? Object.keys(serverFieldEntry[1]).filter(
-                (k) => k !== 'x-component-id' && k !== 'x-field-name'
-              ).length > 0
-            : false,
-          globalSchema: config.schema,
-          serverSchema: serverFieldEntry?.[1],
-          mergedSchema:
-            isActive && serverFieldEntry
-              ? activeSchema.properties?.[serverFieldEntry[0]]
-              : null,
+          definition,
         };
       })
       .filter(Boolean);
@@ -387,71 +267,60 @@ function DynamicFilterContent() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {/* 胶囊式筛选项（直接作为可编辑输入） */}
                 {/* 筛选器字段 - 自适应布局 */}
                 <div className="flex flex-wrap gap-4">
-                  {/* 渲染已激活的字段 */}
-                  {activeFields.map((fieldId) => {
-                    const config = registry.getById(fieldId);
-                    const fieldKey = Object.entries(
-                      SERVER_SCHEMA.properties || {}
-                    ).find(
-                      ([_, schema]: [string, any]) =>
-                        schema['x-component-id'] === fieldId
-                    )?.[0];
+                  {/* 渲染已激活的筛选器 */}
+                  {activeFilters.map((filterId) => {
+                    const definition = registry.getById(filterId);
+                    if (!definition) return null;
 
-                    if (!fieldKey) return null;
+                    // 渲染筛选器的所有字段
+                    const filterFields = Object.keys(activeSchema.properties || {}).filter(
+                      key => (activeSchema.properties as any)[key]['x-filter-id'] === filterId
+                    );
 
                     return (
-                      <FormConsumer key={fieldId}>
-                        {(form) => {
-                          const value = form?.values ? (form.values as any)[fieldKey] : undefined;
-                          const isEmpty = value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0);
-                          return (
-                            <div className={`inline-flex relative items-center gap-2`}
-                            >
+                      <div key={filterId} className="inline-flex relative items-center gap-2 p-3 border rounded-lg">
+                        {/* 筛选器名称 */}
+                        <div className="text-xs font-medium text-muted-foreground mb-2">
+                          {definition.name}
+                        </div>
 
-                              {/* 内嵌输入：尽量紧凑，不扩张全宽 */}
-                              <div className='min-w-[160px]'>
-                              <SchemaField
-                                  schema={{
-                                    type: 'object',
-                                    properties: {
-                                      [fieldKey]: {
-                                        ...(activeSchema.properties?.[fieldKey] as any),
-                                        'x-decorator-props': {
-                                          layout: 'vertical',
-                                          ...(activeSchema.properties?.[fieldKey] as any)?.['x-decorator-props'],
-                                        },
-                                        'x-component-props': {
-                                          ...(activeSchema.properties?.[fieldKey] as any)?.['x-component-props'],
-                                        },
-                                      },
-                                    },
-                                  }}
-                                />
-                              </div>
-                              {/* 移除字段 */}
-                              <button
-                                className=" absolute top-0 right-0 rounded-full hover:bg-destructive/10 text-destructive px-1.5 py-0.5 text-base"
-                                onClick={() => removeField(fieldId)}
-                                aria-label="移除字段"
-                              >
-                                ×
-                              </button>
-                            </div>
-                          );
-                        }}
-                      </FormConsumer>
+                        {/* 渲染筛选器的所有字段 */}
+                        <SchemaField
+                          schema={{
+                            type: 'object',
+                            properties: filterFields.reduce((acc, key) => {
+                              acc[key] = {
+                                ...(activeSchema.properties as any)[key],
+                                'x-decorator-props': {
+                                  layout: 'vertical',
+                                  ...((activeSchema.properties as any)[key])?.['x-decorator-props'],
+                                },
+                              };
+                              return acc;
+                            }, {} as Record<string, any>)
+                          }}
+                        />
+
+                        {/* 移除筛选器按钮 */}
+                        <button
+                          className="absolute top-1 right-1 rounded-full hover:bg-destructive/10 text-destructive px-1.5 py-0.5 text-sm"
+                          onClick={() => removeFilter(filterId)}
+                          aria-label="移除筛选器"
+                        >
+                          ×
+                        </button>
+                      </div>
                     );
                   })}
 
-                  {/* 字段选择器（放在最后） */}
-                  {availableFields.length > 0 && (
+                  {/* 筛选器选择器 */}
+                  {availableFilters.length > 0 && (
                     <div className="rounded-lg p-3 flex items-center justify-center min-h-[64px] min-w-[200px]">
                       <FilterSelector
-                        onSelect={addField}
-                        availableFields={availableFields}
+                        onSelect={addFilter}
+                        availableFilters={availableFilters}
                       />
                     </div>
                   )}
@@ -459,8 +328,8 @@ function DynamicFilterContent() {
 
                 {/* 操作按钮 */}
                 <div className="flex gap-2 justify-between pt-4 border-t">
-                  <Button variant="outline" onClick={resetFields}>
-                    重置字段
+                  <Button variant="outline" onClick={resetFilters}>
+                    重置筛选器
                   </Button>
                   <div className="flex gap-2">
                     <Button variant="outline" onClick={() => filter.reset()}>
@@ -490,8 +359,8 @@ function DynamicFilterContent() {
               </CardHeader>
               <CardContent>
                 {(() => {
-                  const configs = getFieldConfigs(selectedFieldForConfig);
-                  const config = registry.getById(selectedFieldForConfig);
+                  const configs = getFilterConfigs(selectedFieldForConfig);
+                  const definition = registry.getById(selectedFieldForConfig);
 
                   if (!configs)
                     return (
@@ -503,12 +372,12 @@ function DynamicFilterContent() {
                   return (
                     <div>
                       <div className="mb-4 flex items-center gap-2">
-                        <Badge>{config?.name}</Badge>
+                        <Badge>{definition?.name}</Badge>
                         <Badge variant="outline">
                           {selectedFieldForConfig}
                         </Badge>
-                        {config?.category && (
-                          <Badge variant="secondary">{config.category}</Badge>
+                        {definition?.category && (
+                          <Badge variant="secondary">{definition.category}</Badge>
                         )}
                       </div>
 
@@ -547,8 +416,7 @@ function DynamicFilterContent() {
                                 <code className="bg-muted px-1 py-0.5 rounded">
                                   FILTER_CONFIGS
                                 </code>{' '}
-                                中的基础配置， 包含了字段的默认 Schema
-                                定义（组件类型、装饰器、验证规则等）。
+                                中的基础配置。
                               </p>
                             </div>
                           </div>
@@ -582,19 +450,6 @@ function DynamicFilterContent() {
                                 </pre>
                               </div>
                             )}
-                            <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded text-xs">
-                              <p className="font-medium mb-1">说明:</p>
-                              <p className="text-muted-foreground">
-                                这是服务端配置，通过{' '}
-                                <code className="bg-muted px-1 py-0.5 rounded">
-                                  x-component-id
-                                </code>{' '}
-                                引用全局配置，
-                                {configs.serverOverride
-                                  ? '并提供了额外的覆盖配置（如修改 label、placeholder、验证规则等）。'
-                                  : '没有提供额外的覆盖配置，Schema Patch 会直接使用全局配置。'}
-                              </p>
-                            </div>
                           </div>
                         </TabsContent>
 
@@ -607,35 +462,32 @@ function DynamicFilterContent() {
                               <Badge className="bg-green-600">最终配置</Badge>
                             </div>
                             <ConfigViewer
-                              title="Schema Patch 合并后的完整配置"
+                              title="Assembly 合并后的完整配置"
                               config={configs.merged}
                             />
                             <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded text-sm border border-blue-200 dark:border-blue-800">
-                              <p className="font-medium mb-2">合并过程:</p>
+                              <p className="font-medium mb-2">合并过程 (新架构):</p>
                               <div className="space-y-2 text-xs">
                                 <div className="flex items-start gap-2">
                                   <span className="font-mono bg-white dark:bg-slate-800 px-2 py-0.5 rounded">
                                     1.
                                   </span>
                                   <span>
-                                    Schema Patch 拦截到{' '}
-                                    <code className="bg-muted px-1 py-0.5 rounded">
-                                      x-component-id
-                                    </code>
+                                    Provider 调用 Processor.assemble()
                                   </span>
                                 </div>
                                 <div className="flex items-start gap-2">
                                   <span className="font-mono bg-white dark:bg-slate-800 px-2 py-0.5 rounded">
                                     2.
                                   </span>
-                                  <span>从注册表获取全局配置作为基础</span>
+                                  <span>遍历 SERVER_SCHEMA，发现 x-component-id</span>
                                 </div>
                                 <div className="flex items-start gap-2">
                                   <span className="font-mono bg-white dark:bg-slate-800 px-2 py-0.5 rounded">
                                     3.
                                   </span>
                                   <span>
-                                    深度合并服务端提供的覆盖配置（对象深度合并，数组替换）
+                                    从 Registry 获取全局定义，进行深度合并
                                   </span>
                                 </div>
                                 <div className="flex items-start gap-2">
@@ -643,21 +495,9 @@ function DynamicFilterContent() {
                                     4.
                                   </span>
                                   <span>
-                                    删除{' '}
-                                    <code className="bg-muted px-1 py-0.5 rounded">
-                                      x-component-id
-                                    </code>{' '}
-                                    标记，返回最终配置
+                                    返回完整 Schema，Hook 使用 Processor.project() 过滤
                                   </span>
                                 </div>
-                              </div>
-                              <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
-                                <p className="font-medium mb-1">合并规则:</p>
-                                <ul className="list-disc list-inside space-y-1 text-xs">
-                                  <li>对象属性: 深度合并（使用 es-toolkit）</li>
-                                  <li>数组属性: 后者完全替换前者</li>
-                                  <li>优先级: 全局配置 {'<'} 服务端配置</li>
-                                </ul>
                               </div>
                             </div>
                           </div>
@@ -669,30 +509,6 @@ function DynamicFilterContent() {
               </CardContent>
             </Card>
           )}
-
-          {/* 使用说明 */}
-          <Card>
-            <CardHeader>
-              <CardTitle>使用说明</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-sm space-y-2">
-                <p>本示例演示了动态筛选器的核心功能：</p>
-                <ul className="list-disc list-inside space-y-1">
-                  <li>
-                    ✅ 动态添加/删除筛选字段（hover
-                    字段卡片可看到删除和配置按钮）
-                  </li>
-                  <li>✅ 网格布局自动排列筛选器</li>
-                  <li>
-                    ✅ Schema Patch 自动配置合并（点击"配置"按钮查看详情）
-                  </li>
-                  <li>✅ 自动清理被删除字段的表单值</li>
-                  <li>✅ 完全 Headless，UI 自由组装</li>
-                </ul>
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* 右侧配置面板 */}
@@ -709,27 +525,23 @@ function DynamicFilterContent() {
               </p>
             </CardHeader>
             <CardContent className="space-y-3">
-              {getAllFieldsConfig().map((fieldConfig: any) => (
+              {getAllFiltersConfig().map((filterConfig: any) => (
                 <div
-                  key={fieldConfig.fieldId}
+                  key={filterConfig.filterId}
                   className={`p-3 rounded-lg border transition-all ${
-                    fieldConfig.isActive
+                    filterConfig.isActive
                       ? 'bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800'
                       : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800'
-                  } ${
-                    selectedFieldForConfig === fieldConfig.fieldId
-                      ? 'ring-2 ring-blue-500'
-                      : ''
                   }`}
                 >
-                  {/* 字段头部 */}
+                  {/* 筛选器头部 */}
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-medium text-sm">
-                          {fieldConfig.name}
+                          {filterConfig.name}
                         </span>
-                        {fieldConfig.isActive && (
+                        {filterConfig.isActive && (
                           <Badge
                             variant="default"
                             className="text-xs bg-green-600"
@@ -737,113 +549,36 @@ function DynamicFilterContent() {
                             已激活
                           </Badge>
                         )}
-                        {!fieldConfig.isActive && (
-                          <Badge variant="outline" className="text-xs">
-                            未使用
-                          </Badge>
-                        )}
                       </div>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <Badge variant="secondary" className="text-xs">
-                          {fieldConfig.fieldId}
+                          {filterConfig.filterId}
                         </Badge>
-                        {fieldConfig.category && (
+                        {filterConfig.category && (
                           <Badge variant="outline" className="text-xs">
-                            {fieldConfig.category}
+                            {filterConfig.category}
                           </Badge>
                         )}
-                        {fieldConfig.fieldKey && (
-                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
-                            {fieldConfig.fieldKey}
-                          </code>
-                        )}
                       </div>
                     </div>
-                    {fieldConfig.isActive && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={() =>
-                          setSelectedFieldForConfig(
-                            selectedFieldForConfig === fieldConfig.fieldId
-                              ? null
-                              : fieldConfig.fieldId
-                          )
-                        }
-                      >
-                        {selectedFieldForConfig === fieldConfig.fieldId
-                          ? '收起'
-                          : '详情'}
-                      </Button>
-                    )}
-                  </div>
-
-                  {/* 配置状态指示器 */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2 text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                        <span className="text-muted-foreground">全局配置</span>
-                      </div>
-                      <span className="text-green-600 dark:text-green-400">
-                        ✓
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2 text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <div
-                          className={`w-2 h-2 rounded-full ${
-                            fieldConfig.hasServerOverride
-                              ? 'bg-amber-500'
-                              : 'bg-slate-300 dark:bg-slate-600'
-                          }`}
-                        ></div>
-                        <span className="text-muted-foreground">
-                          服务端覆盖
-                        </span>
-                      </div>
-                      {fieldConfig.hasServerOverride ? (
-                        <span className="text-green-600 dark:text-green-400">
-                          ✓
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">-</span>
-                      )}
-                    </div>
-
-                    {fieldConfig.isActive && (
-                      <div className="flex items-center gap-2 text-xs">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                          <span className="text-muted-foreground">
-                            已合并渲染
-                          </span>
-                        </div>
-                        <span className="text-green-600 dark:text-green-400">
-                          ✓
-                        </span>
-                      </div>
-                    )}
                   </div>
 
                   {/* 快速操作 */}
-                  {fieldConfig.isActive ? (
+                  {filterConfig.isActive ? (
                     <Button
                       variant="outline"
                       size="sm"
                       className="w-full mt-2 h-7 text-xs"
-                      onClick={() => removeField(fieldConfig.fieldId)}
+                      onClick={() => removeFilter(filterConfig.filterId)}
                     >
-                      移除字段
+                      移除筛选器
                     </Button>
                   ) : (
                     <Button
                       variant="outline"
                       size="sm"
                       className="w-full mt-2 h-7 text-xs"
-                      onClick={() => addField(fieldConfig.fieldId)}
+                      onClick={() => addFilter(filterConfig.filterId)}
                     >
                       添加到筛选器
                     </Button>
@@ -864,7 +599,7 @@ function DynamicFilterContent() {
             <CardContent>
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-sm mb-2">
-                  <Badge variant="outline">{activeFields.length} 个字段</Badge>
+                  <Badge variant="outline">{activeFilters.length} 个筛选器</Badge>
                   <span className="text-xs text-muted-foreground">
                     已合并完成
                   </span>
@@ -872,17 +607,6 @@ function DynamicFilterContent() {
                 <pre className="bg-slate-900 dark:bg-slate-950 text-slate-100 p-3 rounded text-xs overflow-auto max-h-[400px] font-mono">
                   {JSON.stringify(activeSchema, null, 2)}
                 </pre>
-                <div className="text-xs text-muted-foreground pt-2 border-t">
-                  这是传递给{' '}
-                  <code className="bg-muted px-1 py-0.5 rounded">
-                    SchemaField
-                  </code>{' '}
-                  组件的最终配置， 所有{' '}
-                  <code className="bg-muted px-1 py-0.5 rounded">
-                    x-component-id
-                  </code>{' '}
-                  都已被 Schema Patch 处理。
-                </div>
               </div>
             </CardContent>
           </Card>
@@ -897,25 +621,24 @@ function DynamicFilterPage() {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold">动态筛选器示例</h1>
+        <h1 className="text-3xl font-bold">动态筛选器示例 (新架构)</h1>
         <p className="text-muted-foreground mt-2">
-          基于 Formily Schema Patch 的 Headless 动态筛选器系统
+          基于 Schema Assembly & Projection 的 Headless 动态筛选器系统
         </p>
       </div>
 
       <DynamicFilterProvider
-        filterConfigs={FILTER_CONFIGS}
+        schema={SERVER_SCHEMA}
+        definitions={FILTER_DEFINITIONS}
         components={{
           FormItem,
           Input: FormilyInput,
           Select: FormilySelect,
           DatePicker,
+          Cascader,
+          PriceRangeInput,
         }}
-        scope={
-          {
-            // 可以在这里添加自定义作用域
-          }
-        }
+        scope={{}}
       >
         <DynamicFilterContent />
       </DynamicFilterProvider>

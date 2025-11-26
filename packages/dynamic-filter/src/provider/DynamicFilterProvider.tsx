@@ -1,26 +1,28 @@
-import { useMemo, useEffect } from 'react';
+import { useMemo } from 'react';
 import type { ReactElement } from 'react';
 import { createSchemaField } from '@formily/react';
+import type { ISchema } from '@formily/json-schema';
 import { DynamicFilterContext } from './context';
-import { createSchemaPatch } from '../core/schema-patch';
+import { Processor } from '../core/schema-processor';
 import type {
   DynamicFilterProviderProps,
   FilterRegistry,
-  FilterFieldConfig
+  FilterDefinition
 } from '../types';
 
 /**
  * 动态筛选器 Provider
  *
  * 完成所有注册工作:
- * 1. 创建筛选器配置注册表
+ * 1. 创建筛选器定义注册表
  * 2. 注册 SchemaField 组件
- * 3. 注册 Schema Patch
+ * 3. 组装 Server Layout 和 Registry，生成完整的 Assembled Schema
  *
  * @example
  * ```tsx
  * <DynamicFilterProvider
- *   filterConfigs={[{ id: 'filter:keyword', name: '关键词', schema: {...} }]}
+ *   schema={serverLayoutSchema}
+ *   definitions={FILTER_DEFINITIONS}
  *   components={{ Input, Select }}
  *   scope={{ someUtil }}
  * >
@@ -29,77 +31,72 @@ import type {
  * ```
  */
 export function DynamicFilterProvider(
-  props: DynamicFilterProviderProps
+  props: DynamicFilterProviderProps & { schema?: ISchema }
 ): ReactElement {
   const {
     children,
-    filterConfigs,
+    definitions,
     components,
     scope = {},
-    autoInitPatch = true
+    schema: serverLayoutSchema
   } = props;
 
   // 1. 创建注册表
   const registry = useMemo<FilterRegistry>(() => {
-    const configMap = new Map<string, FilterFieldConfig>();
+    const definitionMap = new Map<string, FilterDefinition>();
 
-    // 将配置数组转换为 Map
-    filterConfigs.forEach(config => {
-      if (!config.id) {
-        console.warn('[Dynamic Filter] 配置缺少 id 字段，已跳过:', config);
+    // 将定义数组转换为 Map
+    definitions.forEach(def => {
+      if (!def.id) {
+        console.warn('[Dynamic Filter] 定义缺少 id 字段，已跳过:', def);
         return;
       }
-      configMap.set(config.id, config);
+      definitionMap.set(def.id, def);
     });
 
     // 返回注册表对象，提供便捷的查询方法
     return {
-      configs: configMap,
+      definitions: definitionMap,
 
-      getById: (id: string) => configMap.get(id),
+      getById: (id: string) => definitionMap.get(id),
 
-      getAll: () => Array.from(configMap.values()),
+      getAll: () => Array.from(definitionMap.values()),
 
       getByCategory: (category: string) => {
-        return Array.from(configMap.values()).filter(
-          c => c.category === category
+        return Array.from(definitionMap.values()).filter(
+          d => d.category === category
         );
       },
 
       search: (keyword: string) => {
         const lowerKeyword = keyword.toLowerCase();
-        return Array.from(configMap.values()).filter(c =>
-          c.name.toLowerCase().includes(lowerKeyword) ||
-          c.id.toLowerCase().includes(lowerKeyword) ||
-          c.category?.toLowerCase().includes(lowerKeyword)
+        return Array.from(definitionMap.values()).filter(d =>
+          d.name.toLowerCase().includes(lowerKeyword) ||
+          d.id.toLowerCase().includes(lowerKeyword) ||
+          d.category?.toLowerCase().includes(lowerKeyword)
         );
       }
     };
-  }, [filterConfigs]);
+  }, [definitions]);
 
   // 2. 创建 SchemaField
   const SchemaField = useMemo(() => {
     return createSchemaField({ components, scope });
   }, [components, scope]);
 
-  // 3. 注册 Schema Patch
-  useEffect(() => {
-    if (!autoInitPatch) return;
-
-    const patch = createSchemaPatch(registry);
-    patch.register();
-
-    // 清理函数(虽然 Formily 没有提供 unregister，但我们可以做一些清理工作)
-    return () => {
-      // 这里可以添加一些清理逻辑
-    };
-  }, [registry, autoInitPatch]);
+  // 3. 组装 Schema (Assembly Phase)
+  // 当 Server Layout 或 Registry 变化时，重新组装
+  const assembledSchema = useMemo(() => {
+    if (!serverLayoutSchema) return undefined;
+    return Processor.assemble(serverLayoutSchema, registry);
+  }, [serverLayoutSchema, registry]);
 
   // 4. 提供 Context
   const contextValue = useMemo(() => ({
     registry,
-    SchemaField
-  }), [registry, SchemaField]);
+    SchemaField,
+    assembledSchema
+  }), [registry, SchemaField, assembledSchema]);
 
   return (
     <DynamicFilterContext.Provider value={contextValue}>
@@ -107,4 +104,3 @@ export function DynamicFilterProvider(
     </DynamicFilterContext.Provider>
   );
 }
-
