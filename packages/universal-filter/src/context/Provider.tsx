@@ -6,8 +6,9 @@ import type {
   FilterProviderProps,
   FilterConfigureProps,
   GlobalDefaults,
-  Draft
+  Draft,
 } from '../core/types';
+import type { OptionsRuntimeConfig } from '../hooks/useOptions';
 
 // ==================== Constants ====================
 export const DEFAULT_NAMESPACE = '__default__';
@@ -28,6 +29,7 @@ interface ConfigureValue<TDraft extends Draft> {
     plugins: 'prepend' | 'append';
     listeners: 'shallow' | 'deep';
   };
+  options?: OptionsRuntimeConfig;
 }
 
 // ==================== Context ====================
@@ -44,6 +46,7 @@ const DEFAULT_CONFIGURE: ConfigureValue<any> = {
     plugins: 'append',
     listeners: 'shallow',
   },
+  options: undefined,
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -70,6 +73,7 @@ export function FilterConfigure<TDraft extends Draft = Draft>(
         plugins: value?.mergeStrategy?.plugins ?? DEFAULT_CONFIGURE.mergeStrategy.plugins,
         listeners: value?.mergeStrategy?.listeners ?? DEFAULT_CONFIGURE.mergeStrategy.listeners,
       },
+      options: value?.options ?? DEFAULT_CONFIGURE.options,
     };
   }, [value]);
 
@@ -151,4 +155,20 @@ export function useConfigure<TDraft extends Draft>(): ConfigureValue<TDraft> {
 export function getGlobalConfigure<TDraft extends Draft>(): ConfigureValue<TDraft> {
   const context = ConfigureContext as unknown as { _currentValue?: ConfigureValue<TDraft> };
   return context._currentValue ?? (DEFAULT_CONFIGURE as ConfigureValue<TDraft>);
+}
+
+/**
+ * 设置全局配置（仅用于测试）
+ * @internal
+ */
+export function setGlobalConfigureForTest<TDraft extends Draft>(config: Partial<ConfigureValue<TDraft>>): void {
+  const context = ConfigureContext as unknown as { _currentValue: ConfigureValue<TDraft> };
+  context._currentValue = {
+    ...DEFAULT_CONFIGURE,
+    ...config,
+    defaults: {
+      ...DEFAULT_CONFIGURE.defaults,
+      ...(config.defaults || {}),
+    } as GlobalDefaults<TDraft>,
+  };
 }

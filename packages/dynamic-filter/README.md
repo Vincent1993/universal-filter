@@ -1,137 +1,348 @@
 # @dfx/dynamic-filter
 
-Headless 动态筛选器系统，基于 Formily Schema Patch 机制实现。
+基于 Schema Assembly 和 Projection 机制的 Headless 动态筛选器系统。
 
-## 特性
+## 核心特性
 
-- 🎯 **纯 Headless**: 只提供 Hooks 和逻辑，零 UI 组件
-- 🔌 **Provider 注册**: 所有注册工作在 Provider 中完成
-- 📦 **单一配置源**: 只有服务端配置，外部注入或动态加载
-- 🔧 **基于 universal-filter**: 复用已有的表单核心能力
-- ⚡ **Schema Patch**: 自动拦截和合并配置
-- 🎨 **动态字段管理**: 运行时添加/删除字段
-- 🧹 **自动清理**: 删除字段自动清理表单值
-- 💪 **类型安全**: 完整的 TypeScript 类型支持
+- ✅ **Schema Assembly**: 一次性组装完整 Schema，无全局副作用
+- ✅ **Schema Projection**: 按需过滤激活字段，高性能渲染
+- ✅ **Thin Hooks, Fat Core**: 逻辑集中在 Core 层，Hooks 只负责状态管理
+- ✅ **完全 Headless**: 无 UI 依赖，自由组装界面
+- ✅ **类型安全**: 完整的 TypeScript 类型定义
+- ✅ **纯函数式**: 所有核心逻辑都是纯函数，可预测、可测试
 
-## 安装
+## 架构原理
 
-```bash
-pnpm add @dfx/dynamic-filter
+```
+┌──────────────────────────────────────┐
+│  服务端                                │
+│  ├─ 全局定义 (FILTER_DEFINITIONS)     │
+│  └─ 页面布局 (SERVER_SCHEMA)          │
+└──────────────┬───────────────────────┘
+               │
+               v
+┌──────────────────────────────────────┐
+│  Provider - Assembly Phase           │
+│  Processor.assemble(Layout, Registry)│
+└──────────────┬───────────────────────┘
+               │
+               v
+┌──────────────────────────────────────┐
+│  Assembled Schema (完整)              │
+└──────────────┬───────────────────────┘
+               │
+               v
+┌──────────────────────────────────────┐
+│  Hook - Projection Phase             │
+│  Processor.project(Schema, activeIds)│
+└──────────────┬───────────────────────┘
+               │
+               v
+┌──────────────────────────────────────┐
+│  Active Schema (渲染)                 │
+└──────────────────────────────────────┘
 ```
 
 ## 快速开始
 
-### 1. 配置 Provider
+### 1. 定义全局筛选器配置
 
 ```typescript
-import { DynamicFilterProvider } from '@dfx/dynamic-filter'
-import { FormItem, Input, Select } from '@formily/antd-v5'
+import type { FilterDefinition } from '@dfx/dynamic-filter';
 
-const filterConfigs = [
+export const FILTER_DEFINITIONS: FilterDefinition[] = [
   {
     id: 'filter:keyword',
     name: '关键词搜索',
-    schema: {
-      type: 'string',
-      'x-component': 'Input',
-      'x-decorator': 'FormItem'
-    }
-  }
-]
+    category: 'search',
+    type: 'string',
+    title: '关键词',
+    'x-component': 'Input',
+    'x-decorator': 'FormItem',
+    'x-component-props': {
+      placeholder: '请输入关键词',
+      allowClear: true,
+    },
+  },
+  {
+    id: 'filter:status',
+    name: '状态筛选',
+    category: 'enum',
+    type: 'string',
+    title: '状态',
+    'x-component': 'Select',
+    'x-decorator': 'FormItem',
+    enum: [
+      { label: '启用', value: 'active' },
+      { label: '禁用', value: 'disabled' },
+    ],
+  },
+];
+```
+
+### 2. 定义服务端 Schema (页面布局)
+
+```typescript
+export const SERVER_SCHEMA = {
+  type: 'object',
+  properties: {
+    keyword: {
+      'x-filter-id': 'filter:keyword',
+      // 可以覆盖全局配置
+      'x-component-props': {
+        placeholder: '搜索用户名或邮箱',
+      },
+    },
+    status: {
+      'x-filter-id': 'filter:status',
+    },
+  },
+};
+```
+
+### 3. 在应用中使用
+
+```tsx
+import { FilterProvider } from '@dfx/universal-filter';
+import {
+  DynamicFilterProvider,
+  useDynamicFilters,
+} from '@dfx/dynamic-filter';
+import { FormItem, Input, Select } from '@formily/antd-v5';
 
 function App() {
   return (
-    <DynamicFilterProvider
-      filterConfigs={filterConfigs}
-      components={{ FormItem, Input, Select }}
-    >
-      <YourApp />
-    </DynamicFilterProvider>
-  )
+    <FilterProvider>
+      <DynamicFilterProvider
+        schema={SERVER_SCHEMA}
+        definitions={FILTER_DEFINITIONS}
+        components={{ FormItem, Input, Select }}
+      >
+        <FilterContent />
+      </DynamicFilterProvider>
+    </FilterProvider>
+  );
 }
-```
 
-### 2. 使用动态字段
-
-```typescript
-import { useDynamicFields, useSchemaField } from '@dfx/dynamic-filter'
-import { createFilter, FilterProvider } from '@dfx/universal-filter'
-
-function FilterPage() {
-  const filter = useMemo(() => createFilter(), [])
-
-  const serverSchema = {
-    type: 'object',
-    properties: {
-      keyword: { 'x-component-id': 'filter:keyword' }
-    }
-  }
-
+function FilterContent() {
+  // 所有状态和方法都从 useDynamicFilters 中获取
   const {
-    activeSchema,
-    addField,
-    removeField
-  } = useDynamicFields({
+    registry,
+    SchemaField,
+    assembledSchema,
     filter,
-    serverSchema,
-    defaultFields: ['filter:keyword']
-  })
-
-  const SchemaField = useSchemaField()
+    activeFilters,
+    activeSchema,
+    availableFilters,
+    addFilter,
+    removeFilter,
+  } = useDynamicFilters();
 
   return (
-    <FilterProvider instance={filter}>
+    <>
+      {/* 渲染已激活的字段 */}
       <SchemaField schema={activeSchema} />
-    </FilterProvider>
-  )
+
+      {/* 添加字段按钮 */}
+      {availableFilters.map((field) => (
+        <button key={field.id} onClick={() => addFilter(field.id)}>
+          添加 {field.name}
+        </button>
+      ))}
+
+      {/* 移除字段按钮 */}
+      {activeFilters.map((filterId) => (
+        <button key={filterId} onClick={() => removeFilter(filterId)}>
+          移除 {filterId}
+        </button>
+      ))}
+    </>
+  );
 }
 ```
 
-## API
+## API 文档
 
 ### DynamicFilterProvider
 
-核心 Provider 组件，完成所有注册工作。
+```typescript
+interface DynamicFilterProviderProps {
+  /** 服务端返回的 Schema Layout */
+  schema?: ISchema;
+  /** 全局筛选器配置列表 */
+  definitions: FilterDefinition[];
+  /** Formily 组件映射 */
+  components: Record<string, any>;
+  /** 表达式作用域 */
+  scope?: Record<string, any>;
+  children: ReactNode;
+}
+```
 
-**Props:**
-- `filterConfigs: FilterFieldConfig[]` - 筛选器字段配置列表
-- `components: Record<string, any>` - SchemaField 组件映射
-- `scope?: Record<string, any>` - 表达式作用域
-- `autoInitPatch?: boolean` - 是否自动初始化 Schema Patch (默认 true)
+### useDynamicFilters
 
-### useDynamicFields
+从 Context 中获取所有状态和方法的主要 Hook。
 
-动态字段管理 Hook。
+```typescript
+interface DynamicFieldsManager {
+  /** 筛选器注册表 */
+  registry: FilterRegistry;
+  /** 已注册的 SchemaField 组件 */
+  SchemaField: any;
+  /** 组装后的完整 Schema */
+  assembledSchema?: ISchema;
+  /** universal-filter 实例 */
+  filter: FilterApi;
+  /** 当前激活的字段 ID 列表 */
+  activeFilters: string[];
+  /** 激活字段的 Schema */
+  activeSchema: ISchema;
+  /** 可添加的字段配置列表 */
+  availableFilters: FilterDefinition[];
+  /** 添加字段 */
+  addFilter: (filterId: string) => void;
+  /** 删除字段 */
+  removeFilter: (filterId: string) => void;
+  /** 重置字段 */
+  resetFilters: () => void;
+  /** 直接设置字段列表 */
+  setFilters: (filterIds: string[]) => void;
+}
+```
 
-**参数:**
-- `filter: FilterApi` - universal-filter 实例
-- `serverSchema: ISchema` - 服务端返回的 Schema
-- `defaultFields?: string[]` - 默认展示的字段 ID 列表
+**使用示例**:
 
-**返回:**
-- `activeFields: string[]` - 当前激活的字段
-- `activeSchema: ISchema` - 激活字段的 Schema
-- `availableFields: FilterFieldConfig[]` - 可添加的字段配置
-- `addField: (fieldId: string) => void` - 添加字段
-- `removeField: (fieldId: string) => void` - 删除字段
-- `resetFields: () => void` - 重置字段
-- `setFields: (fieldIds: string[]) => void` - 直接设置字段列表
+```tsx
+const {
+  registry,        // 访问筛选器注册表
+  SchemaField,     // 渲染表单字段
+  assembledSchema, // 完整的 Schema
+  filter,          // universal-filter 实例
+  activeFilters,   // 当前激活的筛选器
+  activeSchema,    // 激活筛选器的 Schema
+  availableFilters,// 可添加的筛选器
+  addFilter,       // 添加筛选器
+  removeFilter,    // 删除筛选器
+  resetFilters,    // 重置筛选器
+  setFilters,      // 直接设置筛选器列表
+} = useDynamicFilters();
+```
 
-### useFilterRegistry
+### Processor (高级用法)
 
-访问筛选器注册表 Hook。
+```typescript
+interface SchemaProcessor {
+  /** 组装 Schema */
+  assemble: (layout: ISchema, registry: FilterRegistry) => ISchema;
+  /** 投影 Schema */
+  project: (assembledSchema: ISchema, activeIds: string[]) => ISchema;
+  /** 获取可用筛选器 */
+  getAvailableFilters: (
+    registry: FilterRegistry,
+    activeIds: string[]
+  ) => FilterDefinition[];
+}
+```
 
-**返回:**
-- `getById: (id: string) => FilterFieldConfig | undefined`
-- `getAll: () => FilterFieldConfig[]`
-- `getByCategory: (category: string) => FilterFieldConfig[]`
-- `search: (keyword: string) => FilterFieldConfig[]`
+## 配置合并策略
 
-### useSchemaField
+当服务端 Schema 引用全局配置时，会进行智能合并：
 
-获取已注册的 SchemaField 组件。
+```typescript
+// 全局配置
+{
+  id: 'filter:keyword',
+  schema: {
+    type: 'string',
+    title: '关键词',
+    'x-component': 'Input',
+    'x-component-props': {
+      placeholder: '请输入',
+      allowClear: true,
+    }
+  }
+}
+
+// 服务端覆盖
+{
+  'x-filter-id': 'filter:keyword',
+  title: '用户搜索',
+  'x-component-props': {
+    placeholder: '搜索用户名',
+  }
+}
+
+// 合并结果
+{
+  type: 'string',
+  title: '用户搜索',  // 覆盖
+  'x-component': 'Input',  // 保留
+  'x-component-props': {
+    placeholder: '搜索用户名',  // 覆盖
+    allowClear: true,  // 保留
+  }
+}
+```
+
+**合并规则**:
+- 对象属性: 深度合并
+- 数组属性: 后者完全替换前者
+- 优先级: 全局配置 < 服务端配置
+
+## 示例项目
+
+查看 `playground/src/routes/dynamic-filter.tsx` 获取完整示例。
+
+## 与旧版本的区别
+
+### 架构变化
+
+- **旧版**: 使用 `Schema.registerPatches` 全局副作用
+- **新版**: 使用 `Processor.assemble` 纯函数
+
+### API 变化
+
+```typescript
+// 旧版
+<DynamicFilterProvider
+  filterConfigs={configs}
+  autoInitPatch={true}  // ❌ 已移除
+>
+
+// 新版
+<DynamicFilterProvider
+  schema={SERVER_SCHEMA}  // ✅ 新增
+  definitions={configs}
+>
+
+// 旧版 Hook (需要手动传递参数)
+const filter = useFilter();
+const assembledSchema = useAssembledSchema();
+const SchemaField = useSchemaField();
+const registry = useFilterRegistry();
+
+useDynamicFilters({
+  filter,
+  assembledSchema,
+  defaultFilters: ['filter:keyword']
+})
+
+// 新版 Hook (所有状态都在 Context 中管理)
+const {
+  filter,           // ✅ 直接从 Context 获取
+  assembledSchema,  // ✅ 直接从 Context 获取
+  SchemaField,      // ✅ 直接从 Context 获取
+  registry,         // ✅ 直接从 Context 获取
+  activeFilters,
+  activeSchema,
+  availableFilters,
+  addFilter,
+  removeFilter,
+  resetFilters,
+  setFilters
+} = useDynamicFilters();  // ✅ 无需传参，一次性获取所有
+```
 
 ## License
 
 MIT
-

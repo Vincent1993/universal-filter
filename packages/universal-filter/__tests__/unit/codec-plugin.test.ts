@@ -7,8 +7,6 @@ import { createFilter } from '../../src/core';
 import type { Draft } from '../../src/core/types';
 import {
   createCodecTransformPlugin,
-  createKeyTransformTransformer,
-  createFieldMappingTransformer,
   createTransformFunctions,
   type TransformerConfig,
 } from '../../src/plugins/codec/index';
@@ -86,34 +84,6 @@ describe('CodecTransformPlugin', () => {
       filter.dispose();
     });
 
-    it('应该能够执行键名转换', async () => {
-      const transformer = createKeyTransformTransformer(
-        (key) => key.replace(/([A-Z])/g, '_$1').toLowerCase(),
-        { name: 'camel-to-snake', direction: 'inbound' }
-      );
-
-      const filter = createFilter<any>({
-        defaultValues: {
-          firstName: 'John',
-          lastName: 'Doe',
-          userAge: 30,
-        },
-        plugins: [
-          createCodecTransformPlugin({
-            transformers: [transformer],
-            applyOn: 'init',
-          }),
-        ],
-      });
-
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
-      const draft = filter.draft;
-      expect(draft.first_name).toBe('John');
-      expect(draft.last_name).toBe('Doe');
-      expect(draft.user_age).toBe(30);
-      filter.dispose();
-    });
   });
 
   describe('异步转换', () => {
@@ -566,66 +536,7 @@ describe('CodecTransformPlugin', () => {
     });
   });
 
-  describe('字段映射转换', () => {
-    it('应该能够执行字段映射转换', async () => {
-      const transformer = createFieldMappingTransformer(
-        {
-          firstName: 'first_name',
-          lastName: 'last_name',
-          userAge: 'age',
-        },
-        { name: 'field-mapping', direction: 'inbound' }
-      );
 
-      const filter = createFilter<any>({
-        defaultValues: {
-          firstName: 'John',
-          lastName: 'Doe',
-          userAge: 30,
-        },
-        plugins: [
-          createCodecTransformPlugin({
-            transformers: [transformer],
-            applyOn: 'init',
-          }),
-        ],
-      });
-
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
-      const draft = filter.draft;
-      expect(draft.first_name).toBe('John');
-      expect(draft.last_name).toBe('Doe');
-      expect(draft.age).toBe(30);
-      filter.dispose();
-    });
-
-    it('应该能够处理反向字段映射', async () => {
-      const transformer = createFieldMappingTransformer(
-        {
-          firstName: 'first_name',
-          lastName: 'last_name',
-        },
-        { name: 'field-mapping', direction: 'both' }
-      );
-
-      const transformFunctions = createTransformFunctions([transformer]);
-
-      // 入站：firstName -> first_name
-      const inboundResult = await transformFunctions.transformInbound({
-        firstName: 'John',
-        lastName: 'Doe',
-      });
-      expect((inboundResult as any).first_name).toBe('John');
-
-      // 出站：first_name -> firstName
-      const outboundResult = await transformFunctions.transformOutbound({
-        first_name: 'Jane',
-        last_name: 'Smith',
-      });
-      expect((outboundResult as any).firstName).toBe('Jane');
-    });
-  });
 
   describe('转换函数导出', () => {
     it('应该能够导出转换函数供外部使用', async () => {
@@ -732,22 +643,6 @@ describe('CodecTransformPlugin', () => {
       expect((undefinedResult as any).empty).toBe(true);
     });
 
-    it('应该能够处理数组数据', async () => {
-      const transformer = createKeyTransformTransformer(
-        (key) => key.toUpperCase(),
-        { direction: 'inbound' }
-      );
-
-      const transformFunctions = createTransformFunctions([transformer]);
-
-      const result = await transformFunctions.transformInbound([
-        { firstName: 'John', lastName: 'Doe' },
-        { firstName: 'Jane', lastName: 'Smith' },
-      ]);
-
-      expect(Array.isArray(result)).toBe(true);
-      expect((result as any[])[0].FIRSTNAME).toBe('John');
-    });
 
     it('应该能够处理嵌套对象的异步转换', async () => {
       const transformer: TransformerConfig = {
@@ -943,7 +838,7 @@ describe('CodecTransformPlugin', () => {
       const transformer: TransformerConfig = {
         name: 'snake-case-transform',
         direction: 'outbound',
-        transform: (data: any) => {
+        reverseTransform: (data: any) => {
           const result: any = {};
           for (const [key, value] of Object.entries(data)) {
             const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
@@ -997,11 +892,11 @@ describe('CodecTransformPlugin', () => {
       const transformers: TransformerConfig[] = [
         {
           name: 'step1',
-          transform: (data: any) => ({ ...data, step1: true }),
+          reverseTransform: (data: any) => ({ ...data, step1: true }),
         },
         {
           name: 'step2',
-          transform: (data: any) => ({ ...data, step2: true }),
+          reverseTransform: (data: any) => ({ ...data, step2: true }),
         },
       ];
 
@@ -1541,6 +1436,309 @@ describe('CodecTransformPlugin', () => {
       const result = await transformFunctions.transformInbound(objectWithGetter);
 
       expect((result as any).computed).toBe('computed value');
+    });
+  });
+
+  describe('新 API 功能测试', () => {
+    it('应该能够通过 filter.plugin.get 获取插件信息', async () => {
+      const filter = createFilter<TestDraft>({
+        defaultValues: {
+          firstName: 'John',
+          lastName: 'Doe',
+          userAge: 30,
+        },
+        plugins: [
+          createCodecTransformPlugin({
+            transformers: [
+              {
+                name: 'test-transform',
+                transform: (data: any) => ({ ...data, transformed: true }),
+              },
+            ],
+          }),
+        ],
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // 通过新 API 获取插件信息
+      const codecInfo = filter.plugin.get('codec-plugin');
+      expect(codecInfo).toBeDefined();
+      expect(codecInfo?.name).toBe('codec-plugin');
+      expect(codecInfo?.ready).toBe(true);
+      expect(codecInfo?.state).toBeDefined();
+
+      filter.dispose();
+    });
+
+    it('应该能够通过插件状态访问转换函数', async () => {
+      const filter = createFilter<TestDraft>({
+        defaultValues: {
+          firstName: 'John',
+          lastName: 'Doe',
+          userAge: 30,
+        },
+        plugins: [
+          createCodecTransformPlugin({
+            transformers: [
+              {
+                name: 'add-flag',
+                transform: (data: any) => ({ ...data, flag: true }),
+              },
+            ],
+          }),
+        ],
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const codecInfo = filter.plugin.get('codec-plugin');
+      expect(codecInfo).toBeDefined();
+
+      const { transformInbound, transformOutbound } = codecInfo!.state as any;
+      expect(typeof transformInbound).toBe('function');
+      expect(typeof transformOutbound).toBe('function');
+
+      // 手动调用转换函数
+      const result = await transformInbound({ test: 'data' });
+      expect(result.flag).toBe(true);
+      expect(result.test).toBe('data');
+
+      filter.dispose();
+    });
+
+    it('应该能够获取转换状态', async () => {
+      const filter = createFilter<TestDraft>({
+        defaultValues: {
+          firstName: 'John',
+          lastName: 'Doe',
+          userAge: 30,
+        },
+        plugins: [
+          createCodecTransformPlugin({
+            transformers: [
+              {
+                name: 'slow-transform',
+                transform: async (data: any) => {
+                  await new Promise((resolve) => setTimeout(resolve, 50));
+                  return { ...data, slow: true };
+                },
+              },
+            ],
+            applyOn: 'apply', // 只在 apply 时转换，避免初始化时的转换干扰测试
+            enableTransformState: true,
+          }),
+        ],
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const codecInfo = filter.plugin.get('codec-plugin');
+      expect(codecInfo).toBeDefined();
+
+      const transformState = codecInfo!.state.transformState as any;
+      expect(transformState).toBeDefined();
+      // 初始化完成后，转换状态应该是 false
+      expect(transformState.isTransforming).toBe(false);
+
+      filter.dispose();
+    });
+
+    it('await filter.apply() 应该在转换完成后才返回', async () => {
+      const transformer: TransformerConfig = {
+        name: 'async-transform',
+        reverseTransform: async (data: any) => {
+          await new Promise((resolve) => setTimeout(resolve, 30));
+          return { ...data, asyncDone: true };
+        },
+      };
+
+      const filter = createFilter<TestDraft>({
+        defaultValues: {
+          firstName: 'John',
+          lastName: 'Doe',
+          userAge: 30,
+        },
+        plugins: [
+          createCodecTransformPlugin({
+            transformers: [transformer],
+            applyOn: 'apply',
+          }),
+        ],
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // apply 应该等待转换完成
+      await filter.apply();
+
+      // 此时 applied 应该已经包含转换后的数据
+      expect(filter.applied).toBeDefined();
+      expect((filter.applied as any).asyncDone).toBe(true);
+
+      filter.dispose();
+    });
+
+    it('filter.plugin.has 应该正确检查插件是否存在', async () => {
+      const filter = createFilter<TestDraft>({
+        defaultValues: {
+          firstName: 'John',
+          lastName: 'Doe',
+          userAge: 30,
+        },
+        plugins: [
+          createCodecTransformPlugin({
+            transformers: [],
+          }),
+        ],
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(filter.plugin.has('codec-plugin')).toBe(true);
+      expect(filter.plugin.has('non-existent-plugin')).toBe(false);
+
+      filter.dispose();
+    });
+
+    it('filter.plugin.list 应该返回所有插件名称', async () => {
+      const filter = createFilter<TestDraft>({
+        defaultValues: {
+          firstName: 'John',
+          lastName: 'Doe',
+          userAge: 30,
+        },
+        plugins: [
+          createCodecTransformPlugin({
+            transformers: [],
+          }),
+        ],
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const pluginNames = filter.plugin.list();
+      expect(pluginNames).toContain('codec-plugin');
+
+      filter.dispose();
+    });
+
+    it('apply:success 事件中应该能够获取转换后的 applied 值', async () => {
+      const transformer: TransformerConfig = {
+        name: 'snake-case-transform',
+        direction: 'outbound',
+        reverseTransform: (data: any) => {
+          const result: any = {};
+          for (const [key, value] of Object.entries(data)) {
+            const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
+            result[snakeKey] = value;
+          }
+          return result;
+        },
+      };
+
+      const filter = createFilter<TestDraft>({
+        defaultValues: {
+          firstName: 'John',
+          lastName: 'Doe',
+          userAge: 30,
+        },
+        plugins: [
+          createCodecTransformPlugin({
+            transformers: [transformer],
+            applyOn: 'apply',
+          }),
+        ],
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // 修改值
+      filter.setValue('firstName', 'Jane');
+
+      // 监听 apply:success 事件
+      let eventPayload: any = null;
+      filter.on('apply:success', ({ payload }) => {
+        eventPayload = payload;
+      });
+
+      // 执行 apply
+      await filter.apply();
+
+      // 验证事件中的 payload 包含转换后的 applied
+      expect(eventPayload).toBeDefined();
+      expect(eventPayload.applied).toBeDefined();
+      expect(eventPayload.applied.first_name).toBe('Jane');
+      expect(eventPayload.applied.last_name).toBe('Doe');
+      expect(eventPayload.applied.user_age).toBe(30);
+      expect(eventPayload.applied.firstName).toBeUndefined();
+
+      // 验证 filter.applied 也是转换后的值
+      expect(filter.applied).toBeDefined();
+      expect((filter.applied as any).first_name).toBe('Jane');
+
+      filter.dispose();
+    });
+  });
+
+  describe('CodecRuntime 增强逻辑', () => {
+    it('应该将原始值(structured clone)传递给上下文', async () => {
+      const data = { id: 1, value: 'test', nested: { a: 1 } };
+      let capturedContext: any;
+
+      const transformer: TransformerConfig = {
+        name: 'capture',
+        transform: async (d, ctx) => {
+          capturedContext = ctx;
+          return d;
+        },
+      };
+
+      const transformFunctions = createTransformFunctions([transformer]);
+      await transformFunctions.transformInbound(data);
+
+      expect(capturedContext.originalValue).toEqual(data);
+      expect(capturedContext.originalValue).not.toBe(data); // Should be a clone
+      expect(capturedContext.originalValue.nested).not.toBe(data.nested); // Deep clone
+    });
+
+    it('应该在缺少对应方向转换函数时跳过(严格模式)', async () => {
+      const transformer: TransformerConfig = {
+        name: 'only-inbound',
+        transform: async (d: any) => d + '-in',
+        // No reverseTransform
+      };
+
+      const transformFunctions = createTransformFunctions([transformer]);
+
+      // Inbound should work
+      const inboundResult = await transformFunctions.transformInbound('test');
+      expect(inboundResult).toBe('test-in');
+
+      // Outbound should skip (pass through), NOT use transform as fallback
+      const outboundResult = await transformFunctions.transformOutbound('test');
+      expect(outboundResult).toBe('test');
+    });
+
+    it('应该能够使用原始值检查条件', async () => {
+      const transformer: TransformerConfig = {
+        name: 'conditional',
+        condition: async (_d, ctx) => {
+          const orig = ctx.originalValue as any;
+          return orig.shouldTransform === true;
+        },
+        transform: async () => 'transformed',
+      };
+
+      const transformFunctions = createTransformFunctions([transformer]);
+
+      // Should transform
+      const result1 = await transformFunctions.transformInbound({ shouldTransform: true });
+      expect(result1).toBe('transformed');
+
+      // Should skip
+      const result2 = await transformFunctions.transformInbound({ shouldTransform: false });
+      expect(result2).toEqual({ shouldTransform: false });
     });
   });
 });

@@ -7,6 +7,8 @@ import type {
 } from '@formily/core';
 import {
   createForm,
+  onFormInitialValuesChange,
+  onFormMount,
   onFormSubmitStart,
   onFormSubmitSuccess,
   onFormValidateFailed,
@@ -15,15 +17,15 @@ import {
 import { toJS, define, observable } from '@formily/reactive';
 import type { Draft, FilterEventMap, FilterListeners, FilterOptions } from '../types';
 import { cloneDeep, isEqual, debounce } from 'es-toolkit';
+import { AsyncSeriesWaterfallHook } from '../hooks';
 
 // CoreManager 扩展选项
 interface CoreOptions<TDraft extends Draft> extends FilterOptions<TDraft> {
   emitFn?: <K extends keyof FilterEventMap<TDraft>>(
     event: K,
-    payload: FilterEventMap<TDraft>[K]
+    payload: FilterEventMap<TDraft>[K],
   ) => void;
 }
-
 /**
  * CoreManager - 核心状态管理器
  *
@@ -46,10 +48,13 @@ export class CoreManager<TDraft extends Draft> {
   private applyDebounceMs?: number;
 
   /** 已应用的状态快照（最后一次 apply 成功的状态） */
-  applied?: TDraft;
+  _applied?: TDraft;
+
+  /** 上一次应用的状态快照（最后一次 apply 成功的状态） */
+  _lastApplied?: TDraft;
 
   /** 上一次的状态快照（apply 开始时的状态，可用于撤销或对比） */
-  previous?: TDraft;
+  _previous?: TDraft;
 
   /** 上一次的草稿状态（用于 draft:change 事件中的 prev 参数） */
   private previousDraft?: TDraft;
@@ -57,7 +62,7 @@ export class CoreManager<TDraft extends Draft> {
   /** 事件发射函数 (由 Controller 提供) */
   private emitFn?: <K extends keyof FilterEventMap<TDraft>>(
     event: K,
-    payload: FilterEventMap<TDraft>[K]
+    payload: FilterEventMap<TDraft>[K],
   ) => void;
 
   /** 防抖版本的 apply 执行函数 */
@@ -66,12 +71,28 @@ export class CoreManager<TDraft extends Draft> {
   /** changed 状态的缓存 */
   private _changedCache?: { draft: TDraft; defaultValues: TDraft | undefined; result: boolean };
 
+  /** 当前 apply 的 Promise resolve 函数（用于等待异步 hooks 完成） */
+  private applyResolve?: () => void;
+
+  /** 当前 apply 的 Promise reject 函数 */
+  private applyReject?: (error: unknown) => void;
+
+  /** 核心钩子系统 */
+  readonly hooks = {
+    /**
+     * 快照处理钩子
+     * 允许在 apply 成功后，对 applied 快照进行处理（如 codec 编码、数据清洗等）
+     * 这是一个瀑布流钩子，上一个处理器的结果会传递给下一个
+     */
+    processSnapshot: new AsyncSeriesWaterfallHook<TDraft, TDraft>(),
+  };
+
   // ==================== 构造函数 ====================
 
   constructor(optionsConfig: CoreOptions<TDraft> = {}) {
     this.initialize(optionsConfig);
-    this.makeForm(optionsConfig);
     this.makeObservable();
+    this.makeForm(optionsConfig);
     this.setupApplyEffects();
     this.setupDebouncedApply();
   }
@@ -96,12 +117,9 @@ export class CoreManager<TDraft extends Draft> {
   protected setupDebouncedApply(): void {
     // 如果配置了防抖延迟，创建防抖版本的 apply 函数
     if (this.applyDebounceMs && this.applyDebounceMs > 0) {
-      this.debouncedApply = debounce(
-        async () => {
-          await this.form.submit();
-        },
-        this.applyDebounceMs
-      );
+      this.debouncedApply = debounce(async () => {
+        await this.form.submit();
+      }, this.applyDebounceMs);
     }
   }
 
@@ -111,8 +129,9 @@ export class CoreManager<TDraft extends Draft> {
    */
   protected makeObservable(): void {
     define(this, {
-      applied: observable.ref,
-      previous: observable.ref,
+      _applied: observable.ref,
+      _lastApplied: observable.ref,
+      _previous: observable.ref,
     });
   }
 
@@ -137,6 +156,12 @@ export class CoreManager<TDraft extends Draft> {
    */
   protected setupApplyEffects(): void {
     this.form.addEffects('filter-apply', () => {
+      onFormMount((form) => {
+        this.setInitialValues(form.initialValues, 'overwrite');
+      });
+      onFormInitialValuesChange((form) => {
+        this.defaultValues = cloneDeep(form.initialValues) as TDraft;
+      });
       // 监听表单值变化
       onFormValuesChange((form) => {
         const nextDraft = toJS(form.values) as TDraft;
@@ -147,37 +172,69 @@ export class CoreManager<TDraft extends Draft> {
         this._changedCache = undefined;
         this.listeners?.onDraftChange?.(nextDraft, prevDraft);
         this.emitFn?.('draft:change', {
-          draft: nextDraft,
-          prev: prevDraft,
+          draft: cloneDeep(nextDraft),
+          prev: cloneDeep(prevDraft),
         });
       });
 
       // 监听提交开始
       onFormSubmitStart((form) => {
         // previous 保存 apply 开始时的状态
-        this.previous = cloneDeep(this.draft);
-        const current = toJS(form.values) as TDraft;
+        this._previous = this.draft;
+        const current = form.values as TDraft;
         this.listeners?.onApplyStart?.({ draft: current });
         this.emitFn?.('apply:start', { draft: current });
       });
 
       // 监听提交成功
-      onFormSubmitSuccess((form) => {
-        const currentDraft = toJS(form.values) as TDraft;
-        const clonedCurrentDraft = cloneDeep(currentDraft);
-        // 先设置 applied 为原始 draft（插件可能会在事件中修改它）
-        this.applied = clonedCurrentDraft;
-        const payload = clonedCurrentDraft;
+      onFormSubmitSuccess(async (form) => {
+        const currentDraft = form.values as TDraft;
 
-        // 更新 previousDraft 为 apply 时的状态，用于下次值变化时的 prev 参数
-        this.previousDraft = clonedCurrentDraft;
+        // ✅ 使用 toJS 创建一个全新的对象引用
+        // 这样 observable.ref 才能检测到引用变化，从而触发更新
+        const snapshot = toJS(form.values) as TDraft;
 
-        // 触发事件，允许插件修改 applied
+        // 更新 previousDraft
+        // 必须深拷贝，否则它会指向 form.values 的引用（或者包含响应式对象），随后的修改会影响它
+        this.previousDraft = cloneDeep(snapshot);
+
+        // 执行快照处理钩子（如 codec 转换）
+        // 瀑布流执行，允许插件对 snapshot 进行链式处理
+        let transformedApplied = snapshot;
+        try {
+          transformedApplied = await this.hooks.processSnapshot.call(
+            snapshot,
+            currentDraft
+          );
+        } catch (error) {
+          // 处理失败，如果有等待的 Promise，reject 它
+          if (this.applyReject) {
+            this.applyReject(error);
+            return;
+          }
+          // 否则抛出错误（会被 formily 捕获但可能无法中断外部 await）
+          throw error;
+        }
+
+        // 设置转换后的 applied
+        this._applied = cloneDeep(transformedApplied);
+        // 需要设置未转换前的值
+        this._lastApplied = cloneDeep(snapshot);
+
+        // 构建 payload，包含转换后的 applied
+        const payload = {
+          draft: currentDraft,
+          applied: transformedApplied,
+        };
+
+        // 触发事件，此时 applied 已经是转换后的值
         this.listeners?.onApplySuccess?.({ draft: currentDraft, payload });
         this.emitFn?.('apply:success', { draft: currentDraft, payload });
 
-        // 注意：如果插件在事件中修改了 applied，修改后的值会保留
-        // 这允许数据转换插件在 apply:success 时转换 applied 数据
+        // 如果有等待的 Promise，resolve 它
+        this.applyResolve?.();
+        this.applyResolve = undefined;
+        this.applyReject = undefined;
       });
 
       // 监听验证失败
@@ -198,6 +255,20 @@ export class CoreManager<TDraft extends Draft> {
    */
   get draft(): TDraft {
     return toJS(this.form.values) as TDraft;
+  }
+
+  get applied(): TDraft | undefined {
+    return this._applied ? toJS(this._applied) as TDraft : undefined;
+  }
+  /**
+   * 获取最后一次应用的状态快照
+   */
+  get lastApplied(): TDraft | undefined {
+    return this._lastApplied ? toJS(this._lastApplied) as TDraft : undefined;
+  }
+
+  get previous(): TDraft | undefined {
+    return this._previous;
   }
 
   /**
@@ -243,10 +314,7 @@ export class CoreManager<TDraft extends Draft> {
    * 批量设置表单值（支持 overwrite/merge/deepMerge 策略）
    * @see https://core.formilyjs.org/zh-CN/api/models/form#setvalues
    */
-  setValues = (
-    values: Partial<TDraft>,
-    strategy?: IFormMergeStrategy
-  ): void => {
+  setValues = (values: Partial<TDraft>, strategy?: IFormMergeStrategy): void => {
     // 清除 changed 缓存，因为 draft 将变化
     this._changedCache = undefined;
     this.form.setValues(values, strategy);
@@ -276,10 +344,7 @@ export class CoreManager<TDraft extends Draft> {
    * 设置初始值（会切断引用并同步 defaultValues）
    * @see https://core.formilyjs.org/zh-CN/api/models/form#setinitialvalues
    */
-  setInitialValues = (
-    values: Partial<TDraft>,
-    strategy?: IFormMergeStrategy
-  ): void => {
+  setInitialValues = (values: Partial<TDraft>, strategy?: IFormMergeStrategy): void => {
     const plainObject = cloneDeep(values) as unknown as TDraft;
     this.defaultValues = plainObject;
     this._changedCache = undefined;
@@ -306,13 +371,25 @@ export class CoreManager<TDraft extends Draft> {
    * 如果配置了 applyDebounceMs，会自动防抖
    */
   apply = async (): Promise<void> => {
-
     if (this.debouncedApply) {
       await this.debouncedApply();
       return;
     }
+
+    // 如果有 hook 监听器，使用 Promise 等待异步完成
+    // 注意：Formily 的 submit 不会等待异步 effect 完成，所以需要手动等待
+    if (this.hooks.processSnapshot.isUsed) {
+      return new Promise<void>((resolve, reject) => {
+        this.applyResolve = resolve;
+        this.applyReject = reject;
+        // submit 失败时直接 reject
+        void this.form.submit().catch(reject);
+      });
+    }
+
     await this.form.submit();
   };
+
 
   /**
    * @name 重置所有表单项
@@ -327,8 +404,8 @@ export class CoreManager<TDraft extends Draft> {
     const nextValues = shouldForceClear
       ? {}
       : this.defaultValues
-        ? cloneDeep(this.defaultValues)
-        : {};
+      ? cloneDeep(this.defaultValues)
+      : {};
 
     // 先设置值，再重置（这样更高效，避免两次更新）
     this.form.setValues(nextValues as Partial<TDraft>, 'overwrite');
@@ -362,11 +439,13 @@ export class CoreManager<TDraft extends Draft> {
 
     this.listeners = undefined;
     this.defaultValues = undefined;
-    this.applied = undefined;
-    this.previous = undefined;
+    this._applied = undefined;
+    this._previous = undefined;
     this.previousDraft = undefined;
     this._changedCache = undefined;
     this.emitFn = undefined;
     this.applyDebounceMs = undefined;
+    this.applyResolve = undefined;
+    this.applyReject = undefined;
   }
 }

@@ -2,11 +2,21 @@
 export * from './core';
 
 // React Hooks
-export { useField, useFilter } from './hooks';
+export { useField, useFilter, useOptions } from './hooks';
+export type { OptionSourceConfig, OptionItem } from './hooks/useOptions/types';
 
 // React Context & Providers
-export { FilterProvider, FilterConfigure, useConfigure, getGlobalConfigure } from './context';
+export {
+  FilterProvider,
+  FilterConfigure,
+  useConfigure,
+  getGlobalConfigure,
+  useOptionsContext,
+  useRequestClient,
+} from './context';
+
+export { withOptions } from './components/withOptions';
 
 // Plugins
 export * from './plugins/urlSyncPlugin';
-export * from './plugins/dataModelTransformPlugin/index';
+export * from './plugins/codec';

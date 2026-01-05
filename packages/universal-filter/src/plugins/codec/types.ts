@@ -18,20 +18,27 @@ export interface TransformState {
  * codec 转换函数类型
  * @template TSource - 源数据类型
  * @template TTarget - 目标数据类型
+ * @template TOriginal - 原始数据类型
  */
-export type TransformFn<TSource = unknown, TTarget = unknown> = (
+export type TransformFn<
+  TSource = unknown,
+  TTarget = unknown,
+  TOriginal = unknown
+> = (
   source: TSource,
-  context?: TransformContext
+  context?: TransformContext<TOriginal>
 ) => TTarget | Promise<TTarget>;
 
 /**
  * 转换上下文
  */
-export interface TransformContext {
+export interface TransformContext<TOriginal = unknown> {
   /** 转换方向：'inbound' 表示外部数据到内部，'outbound' 表示内部数据到外部 */
   direction: 'inbound' | 'outbound';
   /** 当前字段路径 */
   path?: string;
+  /** 原始数据（转换前的数据副本） */
+  originalValue?: TOriginal;
   /** 其他自定义上下文数据 */
   [key: string]: unknown;
 }
@@ -39,15 +46,22 @@ export interface TransformContext {
 /**
  * codec 转换器配置
  */
-export interface TransformerConfig<TSource = unknown, TTarget = unknown> {
+export interface TransformerConfig<
+  TSource = unknown,
+  TTarget = unknown,
+  TOriginal extends Record<string, any> = Record<string, any>
+> {
   /** 转换器名称（用于调试和日志） */
   name?: string;
-  /** 转换函数：从源数据转换为目标数据 */
-  transform: TransformFn<TSource, TTarget>;
-  /** 反向转换函数（可选）：从目标数据转换回源数据 */
-  reverseTransform?: TransformFn<TTarget, TSource>;
+  /** 转换函数：从源数据转换为目标数据 (Inbound) */
+  transform?: TransformFn<TSource, TTarget, TOriginal>;
+  /** 反向转换函数（可选）：从目标数据转换回源数据 (Outbound) */
+  reverseTransform?: TransformFn<TTarget, TSource, TOriginal>;
   /** 转换条件（可选）：决定是否应用此转换器，支持异步 */
-  condition?: (data: unknown, context: TransformContext) => boolean | Promise<boolean>;
+  condition?: (
+    data: TSource,
+    context: TransformContext<TOriginal>
+  ) => boolean | Promise<boolean>;
   /** 转换方向（可选）：默认为 'both'，表示双向转换 */
   direction?: 'inbound' | 'outbound' | 'both';
 }
@@ -97,8 +111,54 @@ export interface CodecTransformPluginOptions<TDraft extends Draft = Draft> {
  */
 export interface TransformFunctions {
   /** 入站转换：将外部数据转换为内部格式 */
-  transformInbound: (data: unknown) => Promise<unknown>;
+  transformInbound: <T = unknown>(data: T) => Promise<T>;
   /** 出站转换：将内部数据转换为外部格式 */
-  transformOutbound: (data: unknown) => Promise<unknown>;
+  transformOutbound: <T = unknown>(data: T) => Promise<T>;
 }
 
+/**
+ * CodecRuntime 配置选项
+ */
+export interface CodecRuntimeOptions {
+  /**
+   * 转换器列表（按顺序执行）
+   */
+  transformers?: TransformerConfig[];
+  /**
+   * 转换失败时的处理策略
+   * @default 'throw'
+   */
+  onError?: 'throw' | 'skip' | 'fallback';
+  /**
+   * 错误时的回退值
+   */
+  fallbackValue?: unknown;
+  /**
+   * 是否启用调试日志
+   * @default false
+   */
+  debug?: boolean;
+  /**
+   * 是否启用转换状态追踪
+   * @default true
+   */
+  enableTransformState?: boolean;
+  /**
+   * 插件名称（用于状态存储）
+   * @default 'codec-plugin'
+   */
+  pluginName?: string;
+}
+
+/**
+ * Codec 插件公开 API
+ * 通过 filter.plugin.get('codec-plugin')?.state 访问
+ */
+export interface CodecPluginApi {
+  /** 转换状态 */
+  transformState: TransformState;
+  /** 入站转换函数 */
+  transformInbound: <T = unknown>(data: T) => Promise<T>;
+  /** 出站转换函数 */
+  transformOutbound: <T = unknown>(data: T) => Promise<T>;
+}

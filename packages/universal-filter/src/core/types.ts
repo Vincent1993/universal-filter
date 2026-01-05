@@ -2,9 +2,8 @@ import type { Form, GeneralField, IFormProps } from '@formily/core';
 import type { ISchema } from '@formily/json-schema';
 import type { ReactNode } from 'react';
 import type { CoreManager } from './managers';
-import type EventEmitter from 'eventemitter3';
-
 import type { PluginManager } from './managers/PluginManager';
+import type { OptionsRuntimeConfig } from '../hooks/useOptions/types';
 
 export type Draft = Record<string, any>;
 export type JsonRecord = Record<string, unknown>;
@@ -15,10 +14,20 @@ export interface PluginDisposeError {
   error: unknown;
 }
 
+/**
+ * apply:success 事件的 payload 类型
+ */
+export interface ApplySuccessPayload<TDraft extends Draft = Draft> {
+  /** 当前草稿数据（响应式对象） */
+  draft: TDraft;
+  /** 转换后的 applied 数据 */
+  applied: TDraft;
+}
+
 export interface FilterEventMap<TDraft extends Draft = Draft> {
   'draft:change': { draft: TDraft; prev?: TDraft };
   'apply:start': { draft: TDraft };
-  'apply:success': { draft: TDraft; payload: unknown };
+  'apply:success': { draft: TDraft; payload: ApplySuccessPayload<TDraft> };
   'validate:failed': { draft: TDraft; errors: Form['errors'] };
   'reset': { scope: 'all' | 'group' | string; target?: string };
   'plugin:ready': { name: string; ready: boolean; error?: unknown };
@@ -26,6 +35,13 @@ export interface FilterEventMap<TDraft extends Draft = Draft> {
   'plugins:attached': { total: number };
   'plugins:destroyed': { errors: PluginDisposeError[] };
   'destroy': {};
+  /**
+   * Filter 实例完全就绪事件
+   * 触发条件：
+   * 1. Formily Form 已挂载 (onMount)
+   * 2. 所有插件初始化完成 (plugins:ready)
+   */
+  'ready': { root: FilterApi<TDraft> };
 }
 
 export interface FilterEvents<TDraft extends Draft = Draft> {
@@ -110,11 +126,12 @@ export interface FilterListeners<TDraft extends Draft = Draft> {
   onDraftChange?(draft: TDraft, prev?: TDraft): void;
   onFieldChange?(path: string, value: unknown, prev: unknown): void;
   onApplyStart?(ctx: { draft: TDraft }): void;
-  onApplySuccess?(ctx: { draft: TDraft; payload: unknown }): void;
+  onApplySuccess?(ctx: { draft: TDraft; payload: ApplySuccessPayload<TDraft> }): void;
   onApplyError?(err: unknown): void;
   onValidateFailed?(ctx: { draft: TDraft; errors: Form['errors'] }): void;
   onReset?(ctx: { scope: 'all' | 'field' | 'group'; target?: string }): void;
   onDestroy?(ctx: { root: FilterApi<TDraft> }): void;
+  onMount?(ctx: { defaultValues: TDraft }): void;
 }
 
 export interface FilterOptions<TDraft extends Draft = Draft> {
@@ -128,7 +145,7 @@ export interface FilterOptions<TDraft extends Draft = Draft> {
   /**
    * @name Auto Apply
    * @description 自动应用草稿数据到表单，默认情况下，当草稿数据发生变化时，会自动应用到表单
-   * @description 当 onInit 为 true 时，会在初始化时自动应用草稿数据到表单
+   * @description 当 onInit 为 true 时，会在 Filter 完全就绪时自动应用 (Ready = Form Mounted + Plugins Ready)
    * @description 当 onChange 为 true 时，会在草稿数据发生变化时自动应用到表单
    */
   autoApply?: {
@@ -154,6 +171,8 @@ export type EnhancedFieldApi = GeneralField & {
   readonly scope: Record<string, any>;
   /** 是否是当前上下文字段（未传 path 时为 true） */
   readonly isContextField: boolean;
+  /** 设置数据源 */
+  setDataSource(dataSource: unknown): void;
 }
 
 export interface HeadlessRootOptions<TDraft extends Draft = Draft, TRoot = TDraft> {
@@ -179,15 +198,24 @@ export interface LoadOptions{
 // FilterApi - 基于 Formily Form 的过滤器 API
 // 通过 form 属性访问所有 Formily 原生功能，同时提供过滤器特定功能
 export interface FilterApi<TDraft extends Draft = Draft>
-  extends CoreManager<TDraft>,
+  extends Omit<CoreManager<TDraft>, 'dispose'>,
     FilterEvents<TDraft> {
   /** 插件命名空间 - 直接暴露 PluginManager 实例 */
   readonly plugin: PluginManager<TDraft>;
+
+  /** 核心钩子系统 */
+  readonly hooks: CoreManager<TDraft>['hooks'];
 
   /**
    * 销毁当前过滤器实例，触发所有插件和监听器的清理逻辑
    */
   dispose(): void;
+
+  /**
+   * 过滤器是否已就绪（响应式属性）
+   * 就绪 = 插件初始化完成 && 表单挂载完成
+   */
+  readonly ready: boolean;
 
   // 预留：其他命名空间（schema/shard/options/group），逐步补齐
   // readonly schema?: SchemaManager<TDraft>;
@@ -209,6 +237,7 @@ export interface FilterConfigureValue<TDraft extends Draft = Draft> {
     plugins?: 'prepend' | 'append';
     listeners?: 'shallow' | 'deep';
   };
+  options?: OptionsRuntimeConfig;
 }
 
 export interface FilterConfigureProps<TDraft extends Draft = Draft> {

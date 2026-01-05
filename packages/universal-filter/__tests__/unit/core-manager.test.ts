@@ -1050,4 +1050,94 @@ describe('CoreManager - 完整功能测试', () => {
       expect(manager.changed).toBe(true);
     });
   });
+
+  describe('Snapshot Processing Hooks - 快照处理钩子', () => {
+    it('应该通过钩子处理快照', async () => {
+      // 注册钩子
+      manager.hooks.processSnapshot.tap('test-hook', (snapshot) => {
+        return { ...snapshot, processed: true } as any;
+      });
+
+      manager.setValue('name', 'Jane');
+      await manager.apply();
+
+      // 验证 applied 快照已被处理
+      expect((manager.applied as any).processed).toBe(true);
+    });
+
+    it('钩子应该按顺序串行执行（瀑布流）', async () => {
+      manager.hooks.processSnapshot.tap('hook1', (snapshot) => {
+        return { ...snapshot, step1: true } as any;
+      });
+
+      manager.hooks.processSnapshot.tap('hook2', (snapshot) => {
+        // 接收上一个钩子的结果
+        expect((snapshot as any).step1).toBe(true);
+        return { ...snapshot, step2: true } as any;
+      });
+
+      manager.setValue('name', 'Jane');
+      await manager.apply();
+
+      const applied = manager.applied as any;
+      expect(applied.step1).toBe(true);
+      expect(applied.step2).toBe(true);
+    });
+
+    it('钩子支持异步操作', async () => {
+      manager.hooks.processSnapshot.tapPromise('async-hook', async (snapshot) => {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return { ...snapshot, asyncProcessed: true } as any;
+      });
+
+      manager.setValue('name', 'Jane');
+      await manager.apply();
+
+      expect((manager.applied as any).asyncProcessed).toBe(true);
+    });
+
+    it('如果钩子执行失败，apply 应该被拒绝', async () => {
+      manager.hooks.processSnapshot.tap('fail-hook', () => {
+        throw new Error('Hook failed');
+      });
+
+      manager.setValue('name', 'Jane');
+
+      // apply 应该 reject
+      await expect(manager.apply()).rejects.toThrow('Hook failed');
+
+      // 失败时不应该更新 applied
+      expect(manager.applied).toBeUndefined();
+    });
+  });
+
+  describe('reset - 错误清除', () => {
+    it('reset 应该清除表单错误', async () => {
+      // 模拟一个带有验证规则的表单
+      const managerWithValidation = new CoreManager<TestDraft>({
+        defaultValues: { name: 'John' } as any,
+      });
+      // 添加一个必填字段验证
+      managerWithValidation.form.createField({
+        name: 'requiredField',
+        required: true,
+        validator: { required: true, message: '必填' }
+      });
+
+      // 触发验证错误
+      try {
+        await managerWithValidation.validate();
+      } catch (e) {
+        // 忽略验证错误
+      }
+
+      expect(managerWithValidation.state.errors.length).toBeGreaterThan(0);
+
+      // Reset
+      managerWithValidation.reset();
+
+      // 错误应该被清除
+      expect(managerWithValidation.state.errors).toEqual([]);
+    });
+  });
 });

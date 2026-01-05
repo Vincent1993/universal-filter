@@ -4,7 +4,7 @@
   "description": "Headless dynamic filter system based on Formily Schema Patch",
   "main": "./src/index.ts",
   "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
+  "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts"
   },
@@ -23,14 +23,15 @@
     "es-toolkit": "^1.28.0"
   },
   "peerDependencies": {
-    "react": ">=18.0.0",
-    "@formily/core": "^2.3.0",
-    "@formily/react": "^2.3.0",
-    "@formily/json-schema": "^2.3.0",
-    "@dfx/universal-filter": "workspace:*"
+    "react": "18.2.0",
+    "@dfx/universal-filter": "workspace:*",
+    "@formily/core": "^2.3.7",
+    "@formily/react": "^2.3.7",
+    "@formily/json-schema": "^2.3.7"
   },
   "devDependencies": {
-    "@types/react": "^18.3.3"
+    "@monorepo/ts-config": "^1.0.1",
+    "@types/react": "18.2.0"
   }
 }
 
