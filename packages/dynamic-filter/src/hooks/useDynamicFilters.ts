@@ -1,34 +1,36 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useMemo, useContext } from 'react';
 import type { ISchema } from '@formily/json-schema';
-import type { DynamicFieldsManager, UseDynamicFiltersOptions } from '../types';
-import { useFilterRegistry } from './useFilterRegistry';
+import type { DynamicFieldsManager } from '../types';
 import { Processor } from '../core/schema-processor';
+import { DynamicFilterContext } from '../provider/context';
 
 /**
  * 动态筛选器管理 Hook
  *
- * 核心 Hook，提供筛选器的动态添加/删除能力，自动管理表单值的清理。
+ * 从 Context 中获取所有状态和操作方法，提供筛选器的动态管理能力。
  *
- * 注意: 这个 Hook 只负责 React 状态管理和表单清理，所有 Schema 操作都委托给 Processor。
- *
- * @param options - Hook 选项
- * @param options.filter - universal-filter 实例
- * @param options.assembledSchema - 完整组装后的 Schema (来自 Provider)
- * @param options.defaultFilters - 默认展示的筛选器 ID 列表
- *
- * @returns 动态筛选器管理器
+ * @returns 动态筛选器管理器，包含:
+ * - registry: 筛选器注册表
+ * - SchemaField: 已注册的 SchemaField 组件
+ * - assembledSchema: 组装后的完整 Schema
+ * - filter: universal-filter 实例
+ * - activeFilters: 当前激活的筛选器 ID 列表
+ * - activeSchema: 激活筛选器的 Schema
+ * - availableFilters: 可添加的筛选器定义列表
+ * - addFilter: 添加筛选器方法
+ * - removeFilter: 删除筛选器方法
+ * - resetFilters: 重置筛选器方法
+ * - setFilters: 直接设置筛选器列表方法
  *
  * @example
  * ```tsx
  * const {
+ *   registry,
+ *   SchemaField,
  *   activeSchema,
  *   addFilter,
  *   removeFilter
- * } = useDynamicFilters({
- *   filter,
- *   assembledSchema,
- *   defaultFilters: ['filter:keyword']
- * })
+ * } = useDynamicFilters()
  *
  * // 渲染已激活的筛选器
  * <SchemaField schema={activeSchema} />
@@ -38,19 +40,37 @@ import { Processor } from '../core/schema-processor';
  *
  * // 删除筛选器
  * <Button onClick={() => removeFilter('filter:keyword')}>删除关键词</Button>
+ *
+ * // 访问注册表
+ * const config = registry.getById('filter:keyword')
  * ```
  */
-export function useDynamicFilters(
-  options: UseDynamicFiltersOptions
-): DynamicFieldsManager {
-  const { filter, assembledSchema, defaultFilters = [] } = options;
-  const registry = useFilterRegistry();
+export function useDynamicFilters(): DynamicFieldsManager {
+  const context = useContext(DynamicFilterContext);
 
-  // 当前激活的筛选器 ID 列表
-  const [activeFilters, setActiveFilters] = useState<string[]>(defaultFilters);
+  if (!context) {
+    throw new Error('useDynamicFilters 必须在 DynamicFilterProvider 内部使用');
+  }
+
+  const {
+    registry,
+    SchemaField,
+    assembledSchema,
+    filter,
+    activeFilters,
+    addFilter,
+    removeFilter,
+    resetFilters,
+    setFilters,
+    defaultFilters
+  } = context;
 
   // 根据激活筛选器构建动态 Schema (委托给 Processor)
   const activeSchema = useMemo<ISchema>(() => {
+    // 如果没有 assembledSchema，返回空的 Schema 对象
+    if (!assembledSchema) {
+      return { type: 'object', properties: {} };
+    }
     return Processor.project(assembledSchema, activeFilters);
   }, [assembledSchema, activeFilters]);
 
@@ -59,78 +79,19 @@ export function useDynamicFilters(
     return Processor.getAvailableFilters(registry, activeFilters);
   }, [registry, activeFilters]);
 
-  // 添加筛选器
-  const addFilter = useCallback((filterId: string) => {
-    if (!activeFilters.includes(filterId)) {
-      setActiveFilters(prev => [...prev, filterId]);
-    }
-  }, [activeFilters]);
-
-  // 删除筛选器
-  const removeFilter = useCallback((filterId: string) => {
-    setActiveFilters(prev => prev.filter(id => id !== filterId));
-
-    // 清理对应的表单字段
-    // 查找该筛选器下的所有字段
-    if (assembledSchema.properties) {
-      Object.keys(assembledSchema.properties).forEach(key => {
-        const fieldSchema = (assembledSchema.properties as any)[key];
-        if (fieldSchema['x-filter-id'] === filterId) {
-          // 清理 Formily 字段模型(防止内存泄漏)
-          filter.form.clearFormGraph(key);
-          // 删除字段值
-          filter.form.deleteValuesIn(key);
-        }
-      });
-    }
-  }, [filter, assembledSchema]);
-
-  // 重置为默认筛选器
-  const resetFilters = useCallback(() => {
-    setActiveFilters(defaultFilters);
-
-    // 清理非默认筛选器的值
-    if (assembledSchema.properties) {
-      Object.keys(assembledSchema.properties).forEach(key => {
-        const fieldSchema = (assembledSchema.properties as any)[key];
-        const filterId = fieldSchema['x-filter-id'];
-
-        if (filterId && !defaultFilters.includes(filterId)) {
-          filter.form.clearFormGraph(key);
-          filter.form.deleteValuesIn(key);
-        }
-      });
-    }
-  }, [defaultFilters, filter, assembledSchema]);
-
-  // 直接设置筛选器列表
-  const setFilters = useCallback((filterIds: string[]) => {
-    const removedFilters = activeFilters.filter(id => !filterIds.includes(id));
-
-    // 清理被移除筛选器的值
-    if (assembledSchema.properties) {
-      Object.keys(assembledSchema.properties).forEach(key => {
-        const fieldSchema = (assembledSchema.properties as any)[key];
-        const filterId = fieldSchema['x-filter-id'];
-
-        if (filterId && removedFilters.includes(filterId)) {
-          filter.form.clearFormGraph(key);
-          filter.form.deleteValuesIn(key);
-        }
-      });
-    }
-
-    setActiveFilters(filterIds);
-  }, [activeFilters, filter, assembledSchema]);
-
   return {
+    defaultFilters,
+    registry,
+    SchemaField,
+    assembledSchema,
+    filter,
     activeFilters,
     activeSchema,
     availableFilters,
     addFilter,
     removeFilter,
     resetFilters,
-    setFilters
+    setFilters,
   };
 }
 

@@ -55,9 +55,9 @@ export const FILTER_DEFINITIONS: FilterDefinition[] = [
     id: 'filter:keyword',
     name: '关键词搜索',
     category: 'search',
-      type: 'string',
+    type: 'string',
     title: '关键词',
-      'x-component': 'Input',
+    'x-component': 'Input',
     'x-decorator': 'FormItem',
     'x-component-props': {
       placeholder: '请输入关键词',
@@ -103,46 +103,43 @@ export const SERVER_SCHEMA = {
 ### 3. 在应用中使用
 
 ```tsx
-import { createFilter, FilterProvider } from '@dfx/universal-filter';
+import { FilterProvider } from '@dfx/universal-filter';
 import {
   DynamicFilterProvider,
   useDynamicFilters,
-  useSchemaField,
-  useAssembledSchema,
 } from '@dfx/dynamic-filter';
 import { FormItem, Input, Select } from '@formily/antd-v5';
 
 function App() {
   return (
-    <DynamicFilterProvider
-      schema={SERVER_SCHEMA}
-      definitions={FILTER_DEFINITIONS}
-      components={{ FormItem, Input, Select }}
-    >
-      <FilterContent />
-    </DynamicFilterProvider>
+    <FilterProvider>
+      <DynamicFilterProvider
+        schema={SERVER_SCHEMA}
+        definitions={FILTER_DEFINITIONS}
+        components={{ FormItem, Input, Select }}
+      >
+        <FilterContent />
+      </DynamicFilterProvider>
+    </FilterProvider>
   );
 }
 
 function FilterContent() {
-  const filter = useMemo(() => createFilter(), []);
-  const assembledSchema = useAssembledSchema();
-  const SchemaField = useSchemaField();
-
+  // 所有状态和方法都从 useDynamicFilters 中获取
   const {
+    registry,
+    SchemaField,
+    assembledSchema,
+    filter,
     activeFilters,
     activeSchema,
     availableFilters,
     addFilter,
     removeFilter,
-  } = useDynamicFilters({
-    filter,
-    assembledSchema: assembledSchema!,
-    defaultFilters: ['filter:keyword'],
-  });
+  } = useDynamicFilters();
 
   return (
-    <FilterProvider instance={filter}>
+    <>
       {/* 渲染已激活的字段 */}
       <SchemaField schema={activeSchema} />
 
@@ -159,7 +156,7 @@ function FilterContent() {
           移除 {filterId}
         </button>
       ))}
-    </FilterProvider>
+    </>
   );
 }
 ```
@@ -184,17 +181,18 @@ interface DynamicFilterProviderProps {
 
 ### useDynamicFilters
 
+从 Context 中获取所有状态和方法的主要 Hook。
+
 ```typescript
-interface UseDynamicFiltersOptions {
+interface DynamicFieldsManager {
+  /** 筛选器注册表 */
+  registry: FilterRegistry;
+  /** 已注册的 SchemaField 组件 */
+  SchemaField: any;
+  /** 组装后的完整 Schema */
+  assembledSchema?: ISchema;
   /** universal-filter 实例 */
   filter: FilterApi;
-  /** 组装后的完整 Schema */
-  assembledSchema: ISchema;
-  /** 默认展示的字段 ID 列表 */
-  defaultFilters?: string[];
-}
-
-interface DynamicFieldsManager {
   /** 当前激活的字段 ID 列表 */
   activeFilters: string[];
   /** 激活字段的 Schema */
@@ -210,6 +208,24 @@ interface DynamicFieldsManager {
   /** 直接设置字段列表 */
   setFilters: (filterIds: string[]) => void;
 }
+```
+
+**使用示例**:
+
+```tsx
+const {
+  registry,        // 访问筛选器注册表
+  SchemaField,     // 渲染表单字段
+  assembledSchema, // 完整的 Schema
+  filter,          // universal-filter 实例
+  activeFilters,   // 当前激活的筛选器
+  activeSchema,    // 激活筛选器的 Schema
+  availableFilters,// 可添加的筛选器
+  addFilter,       // 添加筛选器
+  removeFilter,    // 删除筛选器
+  resetFilters,    // 重置筛选器
+  setFilters,      // 直接设置筛选器列表
+} = useDynamicFilters();
 ```
 
 ### Processor (高级用法)
@@ -299,18 +315,32 @@ interface SchemaProcessor {
   definitions={configs}
 >
 
-// 旧版 Hook
-useDynamicFields({
-  filter,
-  serverSchema,  // ❌ 已废弃
-})
+// 旧版 Hook (需要手动传递参数)
+const filter = useFilter();
+const assembledSchema = useAssembledSchema();
+const SchemaField = useSchemaField();
+const registry = useFilterRegistry();
 
-// 新版 Hook
-const assembledSchema = useAssembledSchema();  // ✅ 从 Context 获取
 useDynamicFilters({
   filter,
-  assembledSchema,  // ✅ 使用组装后的 Schema
+  assembledSchema,
+  defaultFilters: ['filter:keyword']
 })
+
+// 新版 Hook (所有状态都在 Context 中管理)
+const {
+  filter,           // ✅ 直接从 Context 获取
+  assembledSchema,  // ✅ 直接从 Context 获取
+  SchemaField,      // ✅ 直接从 Context 获取
+  registry,         // ✅ 直接从 Context 获取
+  activeFilters,
+  activeSchema,
+  availableFilters,
+  addFilter,
+  removeFilter,
+  resetFilters,
+  setFilters
+} = useDynamicFilters();  // ✅ 无需传参，一次性获取所有
 ```
 
 ## License

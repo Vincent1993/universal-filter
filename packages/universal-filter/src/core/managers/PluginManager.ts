@@ -33,11 +33,27 @@ export interface PluginState {
 }
 
 /**
- * 插件信息存储结构
+ * 插件信息存储结构（内部使用）
  */
 interface PluginInfo<TDraft extends Draft> {
   plugin: Plugin<TDraft>;
   state: PluginState;
+}
+
+/**
+ * 插件公开信息（对外暴露）
+ */
+export interface PluginPublicInfo<TDraft extends Draft = Draft> {
+  /** 插件名称 */
+  name: string;
+  /** 插件实例 */
+  plugin: Plugin<TDraft>;
+  /** 插件响应式状态（可用于 UI 绑定） */
+  state: PluginState;
+  /** 插件是否就绪 */
+  ready: boolean;
+  /** 插件初始化错误（如果有） */
+  error?: unknown;
 }
 
 export class PluginManager<TDraft extends Draft> {
@@ -71,6 +87,51 @@ export class PluginManager<TDraft extends Draft> {
 
     // Phase 4: 自动初始化插件
     void this.runInit(filterApi);
+
+    // Phase 5: 注册生命周期钩子监听器
+    this.setupLifecycleListeners();
+  }
+
+  /**
+   * @name setupLifecycleListeners
+   * @description 注册插件生命周期钩子监听器
+   * @private
+   */
+  private setupLifecycleListeners(): void {
+    // 监听 draft:change
+    this.bus.on('draft:change', (payload) => {
+      this.plugins.forEach((plugin) => {
+        plugin.onDraftChange?.(payload.draft, payload.prev);
+      });
+    });
+
+    // 监听 apply:start
+    this.bus.on('apply:start', (payload) => {
+      this.plugins.forEach((plugin) => {
+        plugin.onApplyStart?.(payload);
+      });
+    });
+
+    // 监听 apply:success
+    this.bus.on('apply:success', (payload) => {
+      this.plugins.forEach((plugin) => {
+        plugin.onApplySuccess?.(payload);
+      });
+    });
+
+    // 监听 validate:failed
+    this.bus.on('validate:failed', (payload) => {
+      this.plugins.forEach((plugin) => {
+        plugin.onValidateFailed?.(payload);
+      });
+    });
+
+    // 监听 reset
+    this.bus.on('reset', (payload) => {
+      this.plugins.forEach((plugin) => {
+        plugin.onReset?.(payload);
+      });
+    });
   }
 
   /**
@@ -162,6 +223,7 @@ export class PluginManager<TDraft extends Draft> {
    * @internal
    */
   markReady(pluginName: string, ready: boolean, error?: unknown): void {
+    // console.log(`[PluginManager] markReady: ${pluginName} = ${ready}`);
     this.pluginReady.set(pluginName, { ready, error });
     this.bus.emit('plugin:ready', { name: pluginName, ready, error });
   }
@@ -196,6 +258,7 @@ export class PluginManager<TDraft extends Draft> {
           });
           // 注意：markReady 的调用应该由插件自己决定，通过 pluginManager.markReady 调用
         } catch (error) {
+          console.error('[PluginManager] onInit failed:', error);
           // 如果初始化过程中抛出异常，标记为未就绪
           this.markReady(plugin.name, false, error);
         }
@@ -278,6 +341,57 @@ export class PluginManager<TDraft extends Draft> {
    */
   getState<T = Record<string, unknown>>(pluginName: string): T | undefined {
     return this.pluginMap.get(pluginName)?.state as T | undefined;
+  }
+
+  /**
+   * @name get
+   * @description 获取指定插件的公开信息（包含插件实例、响应式状态、就绪状态）
+   * @param pluginName - 插件名称
+   * @returns 插件公开信息，如果插件不存在则返回 undefined
+   *
+   * @example
+   * ```ts
+   * // 获取 codec 插件信息
+   * const codecInfo = filter.plugin.get('codec-plugin');
+   * if (codecInfo) {
+   *   console.log('插件就绪:', codecInfo.ready);
+   *   console.log('转换状态:', codecInfo.state.transformState);
+   * }
+   * ```
+   */
+  get(pluginName: string): PluginPublicInfo<TDraft> | undefined {
+    const pluginInfo = this.pluginMap.get(pluginName);
+    if (!pluginInfo) {
+      return undefined;
+    }
+
+    const readyInfo = this.pluginReady.get(pluginName);
+    return {
+      name: pluginName,
+      plugin: pluginInfo.plugin,
+      state: pluginInfo.state,
+      ready: readyInfo?.ready ?? false,
+      error: readyInfo?.error,
+    };
+  }
+
+  /**
+   * @name has
+   * @description 检查指定插件是否已注册
+   * @param pluginName - 插件名称
+   * @returns 是否存在该插件
+   */
+  has(pluginName: string): boolean {
+    return this.pluginMap.has(pluginName);
+  }
+
+  /**
+   * @name list
+   * @description 获取所有已注册插件的名称列表
+   * @returns 插件名称数组
+   */
+  list(): string[] {
+    return Array.from(this.pluginMap.keys());
   }
 
 }

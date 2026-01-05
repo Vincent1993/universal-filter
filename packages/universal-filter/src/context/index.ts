@@ -4,6 +4,7 @@ export {
   FilterContext,
   useConfigure,
   getGlobalConfigure,
+  setGlobalConfigureForTest,
   DEFAULT_NAMESPACE,
 } from './Provider';
 

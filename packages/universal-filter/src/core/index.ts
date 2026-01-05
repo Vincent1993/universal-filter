@@ -3,8 +3,8 @@ export type { UseOptionsInput } from './types';
 export * from './types';
 export { ERROR_CODES, FilterError, isFilterError } from './errors';
 
-// Option Source
-export { defaultTransform, buildOptionsQueryKey, shouldAutoFetch } from './option-source';
+// Option Source - 从 useOptions 导出
+export { buildOptionsQueryKey, shouldAutoFetch } from '../hooks/useOptions';
 export type {
   OptionStrategy,
   OptionTrigger,
@@ -17,4 +17,4 @@ export type {
   UseOptionsConfig,
   UseOptionsResult,
   OptionsRuntimeConfig,
-} from './option-source';
+} from '../hooks/useOptions';

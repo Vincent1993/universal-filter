@@ -1,4 +1,4 @@
-import type { OptionsRuntimeConfig, RequestClient } from '../core/option-source';
+import type { OptionsRuntimeConfig, RequestClient } from '../hooks/useOptions';
 import { useConfigure } from './Provider';
 
 /**
@@ -15,14 +15,10 @@ export function useOptionsContext(): OptionsRuntimeConfig | null {
  * @param clientName - 可选的命名客户端
  * @returns RequestClient | null
  */
-export function useRequestClient(clientName?: string): RequestClient | null {
+export function useRequestClient(): RequestClient | null {
   const context = useOptionsContext();
 
   if (!context) return null;
-
-  if (clientName && context.clientRegistry?.[clientName]) {
-    return context.clientRegistry[clientName];
-  }
 
   return context.requestClient;
 }

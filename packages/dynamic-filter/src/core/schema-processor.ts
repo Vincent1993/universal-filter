@@ -1,6 +1,7 @@
 import type { ISchema } from '@formily/json-schema';
 import type { FilterRegistry, FilterDefinition } from '../types';
 import { mergeConfig } from '../utils/merge';
+import { cloneDeep } from 'es-toolkit';
 
 export interface SchemaProcessor {
   /**
@@ -12,14 +13,22 @@ export interface SchemaProcessor {
   /**
    * 投影 Schema
    * 根据激活的筛选器列表，生成最终用于渲染的 Schema
+   * @param assembledSchema - 组装后的 Schema，可以为 undefined（未提供 layout 时）
+   * @param activeIds - 激活的筛选器 ID 列表
+   * @returns 投影后的 Schema，如果输入为 undefined 则返回空 Schema
    */
-  project: (assembledSchema: ISchema, activeIds: string[]) => ISchema;
+  project: (assembledSchema: ISchema | undefined, activeIds: string[]) => ISchema;
 
   /**
    * 获取可用筛选器
    * 从 Registry 中获取当前 Schema 中尚未激活的筛选器
    */
   getAvailableFilters: (registry: FilterRegistry, activeIds: string[]) => FilterDefinition[];
+
+  /**
+   * 获取默认选中的筛选器 ID 列表（标记了 x-filter-default=true）
+   */
+  getDefaultFilterIds: (layout: ISchema) => string[];
 }
 
 /**
@@ -28,38 +37,49 @@ export interface SchemaProcessor {
  */
 export const Processor: SchemaProcessor = {
   assemble(layout: ISchema, registry: FilterRegistry): ISchema {
-    // 深拷贝避免修改原始引用
-    const root = JSON.parse(JSON.stringify(layout));
+    const root = cloneDeep(layout);
     return traverseAndAssemble(root, registry);
   },
 
-  project(assembledSchema: ISchema, activeIds: string[]): ISchema {
+  project(assembledSchema: ISchema | undefined, activeIds: string[]): ISchema {
+    // 处理 undefined 或空 schema 的情况
+    if (!assembledSchema) {
+      return { type: 'object', properties: {} };
+    }
+
     if (!assembledSchema.properties) {
       return assembledSchema;
     }
 
-    // 过滤出激活的筛选器对应的 properties
     const activeProperties: Record<string, any> = {};
+    const propertyEntries = Object.entries(assembledSchema.properties);
 
-    Object.keys(assembledSchema.properties).forEach(key => {
-      const propSchema = (assembledSchema.properties as any)[key];
-      const filterId = propSchema['x-filter-id'];
+    activeIds.forEach((activeId) => {
+      const foundEntries = propertyEntries.filter(([_, propSchema]: [string, any]) => {
+        return propSchema['x-filter-id'] === activeId;
+      });
 
-      if (filterId && activeIds.includes(filterId)) {
+      foundEntries.forEach(([key, propSchema]) => {
         activeProperties[key] = propSchema;
-      }
+      });
     });
 
     return {
       ...assembledSchema,
-      properties: activeProperties
+      properties: activeProperties,
     };
   },
 
   getAvailableFilters(registry: FilterRegistry, activeIds: string[]): FilterDefinition[] {
     const allDefinitions = registry.getAll();
     // 过滤掉已激活的筛选器
-    return allDefinitions.filter(def => !activeIds.includes(def.id));
+    return allDefinitions
+  },
+
+  getDefaultFilterIds(layout: ISchema): string[] {
+    const defaults: string[] = [];
+    traverseAndCollectDefaults(layout, defaults);
+    return Array.from(new Set(defaults));
   }
 };
 
@@ -100,6 +120,37 @@ function traverseAndAssemble(node: any, registry: FilterRegistry): any {
   }
 
   return node;
+}
+
+/**
+ * 收集标记了 x-filter-default 的筛选器 ID
+ */
+function traverseAndCollectDefaults(node: any, collected: string[]) {
+  if (!node || typeof node !== 'object') {
+    return;
+  }
+
+  if (node['x-filter-default'] === true && node['x-filter-id']) {
+    collected.push(node['x-filter-id']);
+  }
+
+  if (node.properties) {
+    Object.keys(node.properties).forEach(key => {
+      traverseAndCollectDefaults(node.properties[key], collected);
+    });
+  }
+
+  if (node.items) {
+    if (Array.isArray(node.items)) {
+      node.items.forEach((item: any) => traverseAndCollectDefaults(item, collected));
+    } else {
+      traverseAndCollectDefaults(node.items, collected);
+    }
+  }
+
+  if (node.additionalProperties && typeof node.additionalProperties === 'object') {
+    traverseAndCollectDefaults(node.additionalProperties, collected);
+  }
 }
 
 /**

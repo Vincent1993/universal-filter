@@ -3,7 +3,7 @@ export * from './core';
 
 // React Hooks
 export { useField, useFilter, useOptions } from './hooks';
-export type { UseOptionsParams } from './hooks';
+export type { OptionSourceConfig, OptionItem } from './hooks/useOptions/types';
 
 // React Context & Providers
 export {
@@ -15,5 +15,8 @@ export {
   useRequestClient,
 } from './context';
 
+export { withOptions } from './components/withOptions';
+
 // Plugins
 export * from './plugins/urlSyncPlugin';
+export * from './plugins/codec';

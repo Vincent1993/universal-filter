@@ -1,6 +1,7 @@
 import type { ISchema } from '@formily/json-schema';
 import type { FilterApi } from '@dfx/universal-filter';
 import type { ReactNode } from 'react';
+import { createSchemaField } from '@formily/react';
 
 /**
  * 筛选器定义配置
@@ -42,6 +43,16 @@ export interface DynamicFilterProviderProps {
  * 动态字段管理器返回
  */
 export interface DynamicFieldsManager {
+  /** 筛选器注册表 */
+  registry: FilterRegistry;
+  /** 已注册的 SchemaField 组件 */
+  SchemaField: ReturnType<typeof createSchemaField>
+  /** 组装后的完整 Schema */
+  assembledSchema?: ISchema;
+  /** 默认的筛选器 ID 列表 */
+  defaultFilters: string[];
+  /** universal-filter 实例 */
+  filter: FilterApi;
   /** 当前激活的筛选器 ID 列表 */
   activeFilters: string[];
   /** 激活筛选器的 Schema */
@@ -68,23 +79,16 @@ export interface FilterRegistry {
   getById: (id: string) => FilterDefinition | undefined;
   /** 获取所有定义 */
   getAll: () => FilterDefinition[];
-  /** 根据分类获取定义 */
-  getByCategory: (category: string) => FilterDefinition[];
   /** 搜索定义 */
   search: (keyword: string) => FilterDefinition[];
+  /** 根据元数据获取定义 */
+  getMetadataById: (id: string) => FilterDefinition['metadata'] | undefined;
 }
 
 /**
  * useDynamicFilters Hook 选项
  */
 export interface UseDynamicFiltersOptions {
-  /** universal-filter 实例 */
-  filter: FilterApi;
-  /**
-   * 完整组装后的 Schema
-   * 注意: 这里不再是原始的 serverSchema，而是经过 assemble 后的完整 Schema
-   */
-  assembledSchema: ISchema;
   /** 默认展示的筛选器 ID 列表 */
   defaultFilters?: string[];
 }

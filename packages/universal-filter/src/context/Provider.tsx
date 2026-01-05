@@ -8,7 +8,7 @@ import type {
   GlobalDefaults,
   Draft,
 } from '../core/types';
-import type { OptionsRuntimeConfig } from '../core/option-source';
+import type { OptionsRuntimeConfig } from '../hooks/useOptions';
 
 // ==================== Constants ====================
 export const DEFAULT_NAMESPACE = '__default__';
@@ -155,4 +155,20 @@ export function useConfigure<TDraft extends Draft>(): ConfigureValue<TDraft> {
 export function getGlobalConfigure<TDraft extends Draft>(): ConfigureValue<TDraft> {
   const context = ConfigureContext as unknown as { _currentValue?: ConfigureValue<TDraft> };
   return context._currentValue ?? (DEFAULT_CONFIGURE as ConfigureValue<TDraft>);
+}
+
+/**
+ * 设置全局配置（仅用于测试）
+ * @internal
+ */
+export function setGlobalConfigureForTest<TDraft extends Draft>(config: Partial<ConfigureValue<TDraft>>): void {
+  const context = ConfigureContext as unknown as { _currentValue: ConfigureValue<TDraft> };
+  context._currentValue = {
+    ...DEFAULT_CONFIGURE,
+    ...config,
+    defaults: {
+      ...DEFAULT_CONFIGURE.defaults,
+      ...(config.defaults || {}),
+    } as GlobalDefaults<TDraft>,
+  };
 }

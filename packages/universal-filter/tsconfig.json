@@ -1,5 +1,5 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "@monorepo/ts-config/base.json",
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
