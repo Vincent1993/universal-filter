@@ -140,3 +140,4 @@ vite.config.ts.timestamp-*
 
 .tanstack
 .dupages.conf
+.DS_Store

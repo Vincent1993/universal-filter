@@ -20,3 +20,4 @@ export { withOptions } from './components/withOptions';
 // Plugins
 export * from './plugins/urlSyncPlugin';
 export * from './plugins/codec';
+export * from './plugins/monitorPlugin';

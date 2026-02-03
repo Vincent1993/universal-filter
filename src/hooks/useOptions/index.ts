@@ -11,7 +11,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Schema, type ISchema } from '@formily/json-schema';
-import { useDebounceFn } from '@dfx/hooks';
+import { useDebounceFn } from 'ahooks';
 import { cloneDeep, uniqBy } from 'es-toolkit';
 
 import { useOptionsContext } from '../../context';
