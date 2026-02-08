@@ -26,18 +26,12 @@ importers:
       '@formily/shared':
         specifier: ^2.3.7
         version: 2.3.7
-      '@tanstack/react-query':
-        specifier: 5.90.10
-        version: 5.90.10(react@18.2.0)
       ahooks:
         specifier: ^3.9.6
         version: 3.9.6(react-dom@18.3.1(react@18.2.0))(react@18.2.0)
       es-toolkit:
         specifier: ^1.40.0
         version: 1.44.0
-      eventemitter3:
-        specifier: ^5.0.1
-        version: 5.0.4
       query-string:
         specifier: ^9.3.1
         version: 9.3.1
@@ -48,6 +42,9 @@ importers:
       '@rslib/core':
         specifier: ^0.15.1
         version: 0.15.1(typescript@5.9.3)
+      '@tanstack/react-query':
+        specifier: 5.90.10
+        version: 5.90.10(react@18.2.0)
       '@testing-library/jest-dom':
         specifier: ^6.9.1
         version: 6.9.1
@@ -1190,9 +1187,6 @@ packages:
   esutils@2.0.3:
     resolution: {integrity: sha1-dNLrTeC42hKTcRkQ1Qd1ubcQ72Q=}
     engines: {node: '>=0.10.0'}
-
-  eventemitter3@5.0.4:
-    resolution: {integrity: sha512-mlsTRyGaPBjPedk6Bvw+aqbsXDtoAyAzm5MO7JgU+yVRyMQ5O8bD4Kcci7BS85f93veegeCPkL8R4GLClnjLFw==}
 
   expect-type@1.3.0:
     resolution: {integrity: sha512-knvyeauYhqjOYvQ66MznSMs83wmHrCycNEN6Ao+2AeYEfxUIkuiVxdEa1qlGEPK+We3n0THiDciYSsCcgW/DoA==}
@@ -2976,8 +2970,6 @@ snapshots:
       '@types/estree': 1.0.8
 
   esutils@2.0.3: {}
-
-  eventemitter3@5.0.4: {}
 
   expect-type@1.3.0: {}
 

@@ -524,8 +524,8 @@ describe('FilterController - Ready 状态管理', () => {
       const asyncTransformer: TransformerConfig = {
         name: 'async-apply-transform',
         direction: 'outbound',
-        transform: async (data: any) => {
-          // 模拟异步转换
+        reverseTransform: async (data: any) => {
+          // 模拟异步转换（outbound 使用 reverseTransform）
           await new Promise((resolve) => setTimeout(resolve, 30));
           return { ...data, asyncApplied: true };
         },
