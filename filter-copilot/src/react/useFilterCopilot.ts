@@ -5,7 +5,7 @@
  * Headless 设计：不绑定任何 UI，只暴露数据和方法。
  */
 
-import type { FilterCopilotInstance } from '../index'
+import type { FilterCopilotInstance } from '../core/factory'
 import { useFilterCopilotContext } from './context'
 
 export interface UseFilterCopilotReturn {

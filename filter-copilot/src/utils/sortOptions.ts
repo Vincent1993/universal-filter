@@ -12,11 +12,24 @@
 import type { FilterSelection } from '../types/Filter'
 import type { OptionItem, ScoredOption } from '../types/Option'
 import type { ValueSuggestion } from '../types/Suggestion'
-import type { FilterCopilotInstance } from '../index'
+import type { RecommendValuesOptions } from '../core/Recommender'
+
+/**
+ * 最小化的 Copilot 接口，避免与 index.ts 产生循环依赖。
+ * 任何实现了 recommendValues 的对象均可使用。
+ */
+export interface CopilotLike {
+  recommendValues(
+    targetKey: string,
+    context: FilterSelection[],
+    allValues?: string[],
+    options?: RecommendValuesOptions,
+  ): ValueSuggestion[]
+}
 
 export interface SortOptionsParams<T = unknown> {
-  /** SDK 实例 */
-  copilot: FilterCopilotInstance
+  /** SDK 实例（或任何实现了 recommendValues 的对象） */
+  copilot: CopilotLike
   /** 目标筛选器 key */
   targetKey: string
   /** 当前已选筛选器上下文 */
@@ -107,7 +120,7 @@ export function sortOptions<T = unknown>(params: SortOptionsParams<T>): ScoredOp
  * ```
  */
 export interface MergeSearchParams<T = unknown> {
-  copilot: FilterCopilotInstance
+  copilot: CopilotLike
   targetKey: string
   context: FilterSelection[]
   /** 搜索结果（已按搜索相关性排序） */
