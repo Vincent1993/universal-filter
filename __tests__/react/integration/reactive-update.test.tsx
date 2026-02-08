@@ -17,7 +17,7 @@ import { useFilter } from '../../../src/hooks/useFilter';
 import type { FilterApi } from '../../../src/core/types';
 
 describe('响应式更新集成测试', () => {
-  let testFilter: FilterApi<{ name: string; age?: number }>;
+  let testFilter: FilterApi<{ name: string; age: number }>;
 
   beforeEach(() => {
     testFilter = createTestFilter({ name: 'John', age: 25 });

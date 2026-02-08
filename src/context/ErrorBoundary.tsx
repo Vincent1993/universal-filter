@@ -5,6 +5,8 @@ import React, {
   startTransition,
 } from 'react';
 
+declare const process: { env: { NODE_ENV: string } };
+
 interface ErrorBoundaryProps {
   children: ReactNode;
   fallback?: (error: Error, errorInfo: ErrorInfo, reset: () => void) => ReactNode;
@@ -149,7 +151,7 @@ function DefaultErrorFallback({
   error: Error;
   errorInfo: ErrorInfo;
   reset: () => void;
-}): ReactNode {
+}): JSX.Element {
   const isDevelopment = process.env.NODE_ENV !== 'production';
 
   // React 18: 使用 startTransition 包装重置操作，提升用户体验

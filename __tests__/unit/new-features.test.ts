@@ -10,10 +10,10 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createFilter } from '../../src/core/createFilter';
-import type { Draft, PluginFactory } from '../../src/core/types';
+import type { Draft, FilterApi, PluginFactory } from '../../src/core/types';
 
 // 辅助函数
-async function waitForPluginsReady(filter: ReturnType<typeof createFilter>, timeout = 1000): Promise<void> {
+async function waitForPluginsReady<TDraft extends Draft = Draft>(filter: FilterApi<TDraft>, timeout = 1000): Promise<void> {
   if (filter.plugin.ready) return;
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('Timeout')), timeout);
@@ -21,7 +21,7 @@ async function waitForPluginsReady(filter: ReturnType<typeof createFilter>, time
   });
 }
 
-function triggerFormMount(filter: ReturnType<typeof createFilter>): void {
+function triggerFormMount<TDraft extends Draft = Draft>(filter: FilterApi<TDraft>): void {
   filter.form.onMount();
   const controller = filter as any;
   if (!controller._isFormMounted) {
@@ -40,9 +40,9 @@ describe('beforeApply BailHook', () => {
       listeners: { onApplySuccess: applySuccessSpy },
     });
 
-    // 注册拦截器：空 keyword 时阻止 apply
-    filter.hooks.beforeApply.tap('guard', ({ draft }) => {
+    filter.hooks.beforeApply.tap('guard', ({ draft }): boolean => {
       if (!draft.keyword) return true; // bail
+      return false;
     });
 
     await waitForPluginsReady(filter);
@@ -62,9 +62,9 @@ describe('beforeApply BailHook', () => {
       listeners: { onApplySuccess: applySuccessSpy },
     });
 
-    filter.hooks.beforeApply.tap('guard', ({ draft }) => {
+    filter.hooks.beforeApply.tap('guard', ({ draft }): boolean => {
       if (!draft.keyword) return true;
-      // 不返回 true，不拦截
+      return false;
     });
 
     await waitForPluginsReady(filter);
@@ -81,8 +81,8 @@ describe('beforeApply BailHook', () => {
     const filter = createFilter({ defaultValues: { a: 1 } });
     filter.hooks.applySuccess.tap('spy', applySuccessSpy);
 
-    filter.hooks.beforeApply.tap('pass', () => { /* 不拦截 */ });
-    filter.hooks.beforeApply.tap('block', () => true);
+    filter.hooks.beforeApply.tap('pass', (() => { /* 不拦截 */ }) as never);
+    filter.hooks.beforeApply.tap('block', (): boolean => true);
 
     await waitForPluginsReady(filter);
     triggerFormMount(filter);

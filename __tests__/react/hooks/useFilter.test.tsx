@@ -290,7 +290,7 @@ describe('useFilter Hook', () => {
         filterInstance: sharedFilter,
       });
 
-      const instances: FilterApi<{ name: string }>[] = [];
+      const instances: FilterApi[] = [];
 
       instances.push(result.current);
       rerender();

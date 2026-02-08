@@ -29,6 +29,20 @@ import type {
   OptionTrigger,
 } from './types';
 
+export type {
+  OptionStrategy,
+  OptionTrigger,
+  OptionRequestConfig,
+  OptionItem,
+  OptionRequestContext,
+  RequestClient,
+  OptionTransform,
+  OptionSourceConfig,
+  UseOptionsConfig,
+  UseOptionsResult,
+  OptionsRuntimeConfig,
+} from './types';
+
 // ==================== Helper Functions ====================
 
 /**
