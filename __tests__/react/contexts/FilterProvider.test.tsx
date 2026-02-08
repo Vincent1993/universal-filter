@@ -177,11 +177,11 @@ describe('FilterProvider', () => {
       const originalError = console.error;
       console.error = vi.fn();
 
-      function ThrowError() {
+      function ThrowError(): never {
         throw new Error('测试错误');
       }
 
-      function TestComponent() {
+      function TestComponent(): JSX.Element {
         return <ThrowError />;
       }
 
@@ -199,7 +199,7 @@ describe('FilterProvider', () => {
       const originalError = console.error;
       console.error = vi.fn();
 
-      function ThrowError() {
+      function ThrowError(): never {
         throw new Error('Custom Error');
       }
 
@@ -224,7 +224,7 @@ describe('FilterProvider', () => {
 
       const onError = vi.fn();
 
-      function ThrowError() {
+      function ThrowError(): never {
         throw new Error('Error for callback');
       }
 
@@ -249,11 +249,11 @@ describe('FilterProvider', () => {
 
       const onReset = vi.fn();
 
-      function ThrowError() {
+      function ThrowError(): never {
         throw new Error('Error for reset');
       }
 
-      function TestComponent() {
+      function TestComponent(): JSX.Element {
         return <ThrowError />;
       }
 
@@ -286,8 +286,9 @@ describe('FilterProvider', () => {
         return <div data-testid="recovered">已恢复</div>;
       }
 
+      // resetKeys accepts string | number; use distinct numbers to trigger reset on change
       const { rerender, unmount } = rtlRender(
-        <FilterProvider instance={testFilter} resetKeys={[true]}>
+        <FilterProvider instance={testFilter} resetKeys={[1]}>
           <ConditionalError shouldThrow={true} />
         </FilterProvider>
       );
@@ -297,7 +298,7 @@ describe('FilterProvider', () => {
 
       // 修改条件，重新渲染
       rerender(
-        <FilterProvider instance={testFilter} resetKeys={[false]}>
+        <FilterProvider instance={testFilter} resetKeys={[0]}>
           <ConditionalError shouldThrow={false} />
         </FilterProvider>
       );

@@ -103,7 +103,7 @@ export function createCodecTransformPlugin<TDraft extends Draft = Draft>(
 
         // 将转换函数暴露到插件状态中，供外部调用
         pluginManager.setState<CodecPluginApi>(CODEC_PLUGIN_NAME, (prev) => ({
-          ...prev,
+          transformState: prev?.transformState ?? { isTransforming: false },
           transformInbound: <T = unknown>(data: T) => runtime.runInbound(data),
           transformOutbound: <T = unknown>(data: T) => runtime.runOutbound(data),
         }));

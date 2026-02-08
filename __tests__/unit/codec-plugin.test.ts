@@ -1025,7 +1025,7 @@ describe('CodecTransformPlugin', () => {
             const result: any = {};
             for (const [key, value] of Object.entries(data)) {
               result[`transformed_${key}`] =
-                value && typeof value === 'object' ? transformer.transform(value) : value;
+                value && typeof value === 'object' && transformer.transform ? transformer.transform(value) : value;
             }
             return result;
           }

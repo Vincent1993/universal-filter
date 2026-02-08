@@ -75,7 +75,7 @@ export interface UrlSyncPluginOptions<TDraft extends Draft = Draft> {
    * })
    * ```
    */
-  deserialize?: (params: Record<string, string | (string | null)[] | null>) => Partial<TDraft>;
+  deserialize?: (params: Record<string, unknown>) => Partial<TDraft>;
 
   /**
    * 自定义序列化函数：将 applied 数据转换为 URL 参数
@@ -128,14 +128,14 @@ export interface UrlSyncPluginOptions<TDraft extends Draft = Draft> {
  * 从当前 URL 解析查询参数
  * @internal
  */
-function parseFromUrl(): Record<string, string | (string | null)[] | null> {
+function parseFromUrl(): Record<string, unknown> {
   if (typeof window === 'undefined') return {};
   return qs.parse(window.location.search, {
     arrayFormat: 'comma',
     parseNumbers: true,
     parseBooleans: true,
     decode: true,
-  });
+  }) as Record<string, unknown>;
 }
 
 /**
