@@ -1,28 +1,88 @@
+/**
+ * 监控插件
+ *
+ * 自动采集 Filter 实例的使用指标，用于性能分析和用户行为理解。
+ *
+ * ## 采集指标
+ *
+ * | 指标 | 说明 | 采集时机 |
+ * |------|------|---------|
+ * | `readyDuration` | 从插件初始化到 Filter 就绪的耗时 | ready 事件 |
+ * | `lastProcessingDuration` | 最近一次 apply 的系统处理耗时 | apply:success |
+ * | `lastDecisionDuration` | 从首次操作到提交的用户决策耗时 | apply:success |
+ * | `lastInteractionCount` | 最近一次查询周期内的操作次数 | apply:success |
+ * | `fieldHeatmap` | 各字段的修改频率 | draft:change |
+ * | `validationFriction` | 各字段的校验失败次数 | validate:failed |
+ *
+ * ## 使用方式
+ *
+ * 所有指标通过 `pluginManager.getState('monitor-plugin')` 获取（响应式），
+ * 也可通过 `onReport` 回调上报到监控平台。
+ *
+ * @example
+ * ```ts
+ * const filter = createFilter({
+ *   plugins: [
+ *     createMonitorPlugin({
+ *       debug: false,
+ *       onReport: (event, data) => {
+ *         analytics.track(event, data);
+ *       },
+ *     }),
+ *   ],
+ * });
+ *
+ * // 在组件中读取指标（响应式）
+ * const metrics = filter.plugin.getState<MonitorMetrics>('monitor-plugin');
+ * ```
+ *
+ * @module
+ */
 import type { Draft, Plugin, PluginInitContext, ApplySuccessPayload } from '../core/types';
 
 export const MONITOR_PLUGIN_NAME = 'monitor-plugin';
 
+/**
+ * 监控指标数据结构（响应式）
+ */
 export interface MonitorMetrics {
   /** 实例就绪耗时 (ms) */
   readyDuration?: number;
-  /** 最近一次查询的处理耗时 (ms) - 系统开销 */
+  /** 最近一次 apply 的系统处理耗时 (ms)，包括 codec 转换 */
   lastProcessingDuration?: number;
-  /** 最近一次查询的用户决策耗时 (ms) - 用户思考时间 */
+  /** 从首次操作到最终 apply 成功的用户决策耗时 (ms) */
   lastDecisionDuration?: number;
-  /** 最近一次查询的操作次数 */
+  /** 最近一次查询周期内的操作次数 */
   lastInteractionCount: number;
-  /** 字段热度统计 (fieldKey -> 修改次数) */
+  /** 字段修改热度 (fieldKey → 修改次数) */
   fieldHeatmap: Record<string, number>;
-  /** 校验错误统计 (fieldPath -> 失败次数) */
+  /** 校验失败摩擦力 (fieldPath → 失败次数) */
   validationFriction: Record<string, number>;
 }
 
+/**
+ * 监控插件配置
+ */
 export interface MonitorPluginOptions {
-  /** 埋点上报回调 */
+  /**
+   * 埋点上报回调，每次状态变更时触发
+   * @param event - 事件名（如 `'filter_ready'`、`'filter_apply_success'`）
+   * @param data - 事件数据
+   */
   onReport?: (event: string, data: any) => void;
-  /** 是否开启调试日志 */
+  /**
+   * 是否输出调试日志到 console
+   * @default false
+   */
   debug?: boolean;
 }
+
+/**
+ * 创建监控插件
+ *
+ * @param options - 插件配置
+ * @returns Plugin 对象
+ */
 export function createMonitorPlugin<TDraft extends Draft = Draft>(
   options: MonitorPluginOptions = {}
 ): Plugin<TDraft> {

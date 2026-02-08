@@ -58,9 +58,24 @@ export class FilterController<TDraft extends Draft>
     const instancePlugins = (optionsConfig.plugins ?? []) as PluginFactory<TDraft>[];
     const strategy = configure.mergeStrategy?.plugins ?? 'append';
 
-    super(optionsConfig);
+    // === resolveOptions 预初始化阶段 ===
+    // 在 Formily Form 创建之前，允许直接传入的插件对象修改 FilterOptions
+    // 典型用途：urlSyncPlugin 在此阶段将 URL 参数注入 defaultValues
+    const mergedFactories = strategy === 'prepend'
+      ? [...instancePlugins, ...globalPlugins]
+      : [...globalPlugins, ...instancePlugins];
 
-    this._optionsConfig = optionsConfig;
+    let resolvedConfig = optionsConfig;
+    for (const factory of mergedFactories) {
+      if (typeof factory !== 'function' && typeof factory.resolveOptions === 'function') {
+        resolvedConfig = factory.resolveOptions(resolvedConfig);
+      }
+    }
+
+    // CoreManager 使用解析后的配置创建 Formily Form
+    super(resolvedConfig);
+
+    this._optionsConfig = resolvedConfig;
     this.makeControllerObservable();
     this.setupReadyCheck(optionsConfig);
 
