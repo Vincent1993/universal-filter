@@ -34,3 +34,14 @@ export function writeStorage(key: string, data: unknown): void {
     // 静默失败：可能是存储已满或隐私模式
   }
 }
+
+export function removeStorage(key: string): void {
+  try {
+    if (typeof localStorage === 'undefined') {
+      return
+    }
+    localStorage.removeItem(key)
+  } catch {
+    // 静默失败
+  }
+}

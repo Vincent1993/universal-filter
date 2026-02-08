@@ -11,7 +11,7 @@ import type { Suggestion } from './types/Suggestion'
 
 import { BehaviorStore } from './core/BehaviorStore'
 import { RuleEngine } from './core/RuleEngine'
-import { Recommender } from './core/Recommender'
+import { Recommender, type RecommendOptions } from './core/Recommender'
 import { createPersistencePlugin } from './plugins/persistence'
 import { createUserProfilePlugin } from './plugins/userProfile'
 
@@ -25,9 +25,16 @@ export interface CreateFilterCopilotOptions {
 }
 
 export interface FilterCopilotInstance {
-  recommend(context: string[]): Suggestion[]
+  /** 根据当前已选筛选器推荐下一步 */
+  recommend(context: string[], options?: RecommendOptions): Suggestion[]
+  /** 记录一次筛选行为 */
   record(action: FilterAction): void
+  /** 导出当前行为数据 */
   export(): unknown
+  /** 导入行为数据（增量合并或覆盖） */
+  import(data: unknown, merge?: boolean): void
+  /** 重置全部行为数据（同时清除持久化存储） */
+  reset(): void
 }
 
 export function createFilterCopilot(options: CreateFilterCopilotOptions): FilterCopilotInstance {
@@ -65,12 +72,12 @@ export function createFilterCopilot(options: CreateFilterCopilotOptions): Filter
     /**
      * 根据当前已选筛选器推荐下一步
      */
-    recommend(context: string[]): Suggestion[] {
+    recommend(context: string[], recommendOptions?: RecommendOptions): Suggestion[] {
       try {
         if (!Array.isArray(context)) {
           return []
         }
-        return recommender.recommend(context)
+        return recommender.recommend(context, recommendOptions)
       } catch {
         return []
       }
@@ -106,6 +113,39 @@ export function createFilterCopilot(options: CreateFilterCopilotOptions): Filter
         return { transitions: {}, frequency: {} }
       }
     },
+
+    /**
+     * 导入行为数据
+     * @param data 行为数据
+     * @param merge 是否增量合并（默认 false 覆盖）
+     */
+    import(data: unknown, merge = false): void {
+      try {
+        behaviorStore.import(data, merge)
+
+        if (persistencePlugin) {
+          persistencePlugin.save(behaviorStore.export())
+        }
+      } catch {
+        // 不抛异常到调用方
+      }
+    },
+
+    /**
+     * 重置全部行为数据
+     * 同时清除持久化存储
+     */
+    reset(): void {
+      try {
+        behaviorStore.clear()
+
+        if (persistencePlugin) {
+          persistencePlugin.clear()
+        }
+      } catch {
+        // 不抛异常到调用方
+      }
+    },
   }
 }
 
@@ -113,3 +153,5 @@ export function createFilterCopilot(options: CreateFilterCopilotOptions): Filter
 export type { FilterDef, FilterDefs } from './types/Filter'
 export type { FilterAction } from './types/Behavior'
 export type { Suggestion } from './types/Suggestion'
+export type { RecommendOptions } from './core/Recommender'
+export type { BehaviorData } from './core/BehaviorStore'

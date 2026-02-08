@@ -11,6 +11,7 @@
  * 3. 去除已选筛选器
  * 4. 规则过滤（RuleEngine）
  * 5. 用户偏好权重（可选）
+ * 6. filterDef.weight 权重加成
  */
 
 import type { FilterDefs } from '../types/Filter'
@@ -20,6 +21,11 @@ import type { RuleEngine } from './RuleEngine'
 
 const TRANSITION_WEIGHT = 3
 const FREQUENCY_WEIGHT = 1
+
+export interface RecommendOptions {
+  /** 最大返回结果数，默认不限制 */
+  maxResults?: number
+}
 
 export class Recommender {
   private filterDefs: FilterDefs
@@ -49,7 +55,7 @@ export class Recommender {
   /**
    * 根据当前 context（已选筛选器列表）推荐下一步筛选器
    */
-  recommend(context: string[]): Suggestion[] {
+  recommend(context: string[], options?: RecommendOptions): Suggestion[] {
     try {
       if (!Array.isArray(context)) {
         return []
@@ -126,8 +132,19 @@ export class Recommender {
         })
       }
 
-      // 按分数降序排序
-      suggestions.sort((a, b) => b.score - a.score)
+      // 按分数降序排序，分数相同时按 key 字典序保证稳定排序
+      suggestions.sort((a, b) => {
+        if (b.score !== a.score) {
+          return b.score - a.score
+        }
+        return a.key < b.key ? -1 : a.key > b.key ? 1 : 0
+      })
+
+      // 截断结果
+      const maxResults = options?.maxResults
+      if (maxResults !== undefined && maxResults > 0 && suggestions.length > maxResults) {
+        return suggestions.slice(0, maxResults)
+      }
 
       return suggestions
     } catch {
