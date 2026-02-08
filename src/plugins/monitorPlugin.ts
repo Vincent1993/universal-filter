@@ -56,16 +56,19 @@ export function createMonitorPlugin<TDraft extends Draft = Draft>(
       });
 
       // 2. 统计【就绪耗时】: 从插件初始化到 Ready 事件触发
-      const handleReady = () => {
+      // 使用 tapable hooks 替代 filter.once('ready', ...)
+      let readyHandled = false;
+      filter.hooks.ready.tap('MonitorPlugin:ready', () => {
+        if (readyHandled) return; // 模拟 once 行为
+        readyHandled = true;
         const readyDuration = performance.now() - pluginStartTime;
         pluginManager.setState(MONITOR_PLUGIN_NAME, { readyDuration });
         logDebug('就绪耗时:', readyDuration.toFixed(2), 'ms');
         emitReport('filter_ready', { duration: readyDuration });
-      };
-      filter.once('ready', handleReady);
+      });
 
       // 3. 统计【决策起点】与【字段热度】
-      const handleDraftChange = ({ draft, prev }: any) => {
+      filter.hooks.draftChange.tap('MonitorPlugin:draftChange', ({ draft, prev }: any) => {
         // 记录决策起点
         if (decisionStartTime === null) {
           decisionStartTime = performance.now();
@@ -90,20 +93,18 @@ export function createMonitorPlugin<TDraft extends Draft = Draft>(
             lastInteractionCount: interactionCount,
           };
         });
-      };
-      filter.on('draft:change', handleDraftChange);
+      });
 
       // 4. 统计【系统处理耗时起点】
-      const handleApplyStart = () => {
+      filter.hooks.applyStart.tap('MonitorPlugin:applyStart', () => {
         processingStartTime = performance.now();
-      };
-      filter.on('apply:start', handleApplyStart);
+      });
 
       // 5. 统计【决策终点】与【处理耗时终点】
-      const handleApplySuccess = (
-        event: { draft: TDraft; payload: ApplySuccessPayload<TDraft> } | ApplySuccessPayload<TDraft>
+      filter.hooks.applySuccess.tap('MonitorPlugin:applySuccess', (
+        event: { draft: TDraft; payload: ApplySuccessPayload<TDraft> }
       ) => {
-        const payload = 'payload' in event ? event.payload : event;
+        const payload = event.payload;
 
         // 未发生任何用户操作，过滤掉 0 耗时上报
         if (decisionStartTime === null && interactionCount === 0) {
@@ -151,11 +152,10 @@ export function createMonitorPlugin<TDraft extends Draft = Draft>(
         decisionStartTime = null;
         processingStartTime = null;
         interactionCount = 0;
-      };
-      filter.on('apply:success', handleApplySuccess);
+      });
 
       // 6. 统计【校验摩擦力】: 记录哪些字段导致了校验失败
-      const handleValidateFailed = ({ errors }: { errors: Array<{ address?: string }> }) => {
+      filter.hooks.validateFailed.tap('MonitorPlugin:validateFailed', ({ errors }: { errors: Array<{ address?: string }> }) => {
         pluginManager.setState<MonitorMetrics>(MONITOR_PLUGIN_NAME, (state) => {
           const baseState: MonitorMetrics = state ?? {
             lastInteractionCount: 0,
@@ -172,17 +172,15 @@ export function createMonitorPlugin<TDraft extends Draft = Draft>(
 
         logDebug('校验失败:', errors);
         emitReport('filter_validate_failed', { errorCount: errors.length });
-      };
-      filter.on('validate:failed', handleValidateFailed);
+      });
 
       // 7. 重置逻辑
-      const handleReset = () => {
+      filter.hooks.reset.tap('MonitorPlugin:reset', () => {
         decisionStartTime = null;
         processingStartTime = null;
         interactionCount = 0;
         logDebug('用户重置了筛选器');
-      };
-      filter.on('reset', handleReset);
+      });
 
       // 标记监控插件就绪
       pluginManager.markReady(MONITOR_PLUGIN_NAME, true);

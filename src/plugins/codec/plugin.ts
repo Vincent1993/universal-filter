@@ -17,9 +17,11 @@ export const CODEC_PLUGIN_NAME = 'codec-plugin';
  * 该插件用于在 Filter 的数据流入流出时进行数据格式转换，
  * 主要用于前后端数据模型的适配。
  *
+ * 现在使用 tapable 的 AsyncSeriesWaterfallHook（filter.hooks.processSnapshot）
+ * 来注册出站转换，替代了原来的自制 hook。
+ *
  * @example
  * ```ts
- * // 基础同步转换
  * const plugin = createCodecTransformPlugin({
  *   transformers: [
  *     {
@@ -30,41 +32,6 @@ export const CODEC_PLUGIN_NAME = 'codec-plugin';
  *   ],
  *   applyOn: 'both',
  * });
- *
- * // 异步转换示例（带加载状态）
- * const asyncPlugin = createCodecTransformPlugin({
- *   transformers: [
- *     {
- *       name: 'async-fetch',
- *       transform: async (data) => {
- *         const extraData = await fetchExtraData(data.id);
- *         return { ...data, ...extraData };
- *       },
- *     },
- *   ],
- *   applyOn: 'init',
- *   onError: 'skip',
- *   enableTransformState: true,
- * });
- *
- * // 在组件中使用响应式状态（用于 UI 加载提示）
- * import { observer } from '@formily/reactive-react';
- *
- * const MyComponent = observer(() => {
- *   const codecInfo = filter.plugin.get('codec-plugin');
- *   const transformState = codecInfo?.state.transformState as TransformState;
- *   if (transformState?.isTransforming) {
- *     return <Loading message={`正在转换 ${transformState.currentTransformer || '数据'}`} />;
- *   }
- *   return <Form />;
- * });
- *
- * // 手动调用转换函数
- * const codecInfo = filter.plugin.get('codec-plugin');
- * if (codecInfo) {
- *   const { transformInbound, transformOutbound } = codecInfo.state as CodecPluginApi;
- *   const encoded = await transformOutbound(myData);
- * }
  * ```
  */
 export function createCodecTransformPlugin<TDraft extends Draft = Draft>(
@@ -95,9 +62,6 @@ export function createCodecTransformPlugin<TDraft extends Draft = Draft>(
       console.log(`[CodecTransformPlugin] ${message}`, ...args);
     }
   };
-
-  // 存储清理函数
-  let unregisterPostApply: (() => void) | undefined;
 
   return {
     name: CODEC_PLUGIN_NAME,
@@ -132,11 +96,12 @@ export function createCodecTransformPlugin<TDraft extends Draft = Draft>(
         }
 
         // 如果需要应用时转换，注册 hook
+        // 使用 tapable 的 AsyncSeriesWaterfallHook（filter.hooks.processSnapshot）
         if (
           (applyOn === 'apply' || applyOn === 'both') &&
           runtime.hasTransformers()
         ) {
-          unregisterPostApply = filter.hooks.processSnapshot.tapPromise(
+          filter.hooks.processSnapshot.tapPromise(
             `${CODEC_PLUGIN_NAME}-outbound`,
             async (applied, _draft) => {
               log('执行出站转换');
@@ -167,11 +132,8 @@ export function createCodecTransformPlugin<TDraft extends Draft = Draft>(
     },
 
     onDestroy() {
-      // 清理 post-apply 转换器
-      if (unregisterPostApply) {
-        unregisterPostApply();
-        unregisterPostApply = undefined;
-      }
+      // tapable hooks 不需要手动取消注册
+      // 当 filter 被销毁时，hooks 实例会随之释放
     },
   };
 }

@@ -15,7 +15,6 @@ export interface UrlSyncPluginOptions<TDraft extends Draft> {
   /**
    * URL 值与当前默认值的合并策略，默认为覆盖
    * @default 'overwrite'
-   * @description 当 URL 值与当前默认值不同时，如何合并 URL 值到默认值，支持 'overwrite - 覆盖' | 'merge - 合并' | 'deepMerge - 深度合并' | 'shallowMerge - 浅层合并'
    */
   mergeStrategy?: IFormMergeStrategy;
   /**
@@ -59,4 +58,3 @@ export function createUrlSyncPlugin<TDraft extends Draft = Draft>(
   };
   return plugin;
 }
-

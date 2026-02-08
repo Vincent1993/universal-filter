@@ -15,22 +15,18 @@ import {
   onFormValuesChange,
 } from '@formily/core';
 import { toJS, define, observable } from '@formily/reactive';
-import type { Draft, FilterEventMap, FilterListeners, FilterOptions } from '../types';
+import type { Draft, FilterListeners, FilterOptions } from '../types';
 import { cloneDeep, isEqual, debounce } from 'es-toolkit';
-import { AsyncSeriesWaterfallHook } from '../hooks';
+import { createFilterHooks, type FilterHooks } from '../hooks';
 
-// CoreManager 扩展选项
-interface CoreOptions<TDraft extends Draft> extends FilterOptions<TDraft> {
-  emitFn?: <K extends keyof FilterEventMap<TDraft>>(
-    event: K,
-    payload: FilterEventMap<TDraft>[K],
-  ) => void;
-}
 /**
  * CoreManager - 核心状态管理器
  *
  * 参考 Formily Form 设计，提供基于 Formily 的状态管理能力
  * 包括草稿管理、快照、验证等功能
+ *
+ * hooks 是整个系统的唯一事件源（基于 tapable），
+ * 移除了原有的 emitFn 透传模式。
  *
  * @template TDraft - 草稿数据类型
  */
@@ -59,12 +55,6 @@ export class CoreManager<TDraft extends Draft> {
   /** 上一次的草稿状态（用于 draft:change 事件中的 prev 参数） */
   private previousDraft?: TDraft;
 
-  /** 事件发射函数 (由 Controller 提供) */
-  private emitFn?: <K extends keyof FilterEventMap<TDraft>>(
-    event: K,
-    payload: FilterEventMap<TDraft>[K],
-  ) => void;
-
   /** 防抖版本的 apply 执行函数 */
   private debouncedApply?: ReturnType<typeof debounce<() => Promise<void>>>;
 
@@ -77,24 +67,19 @@ export class CoreManager<TDraft extends Draft> {
   /** 当前 apply 的 Promise reject 函数 */
   private applyReject?: (error: unknown) => void;
 
-  /** 核心钩子系统 */
-  readonly hooks = {
-    /**
-     * 快照处理钩子
-     * 允许在 apply 成功后，对 applied 快照进行处理（如 codec 编码、数据清洗等）
-     * 这是一个瀑布流钩子，上一个处理器的结果会传递给下一个
-     */
-    processSnapshot: new AsyncSeriesWaterfallHook<TDraft, TDraft>(),
-  };
+  /** 统一钩子注册表（基于 tapable） */
+  readonly hooks: FilterHooks<TDraft>;
 
   // ==================== 构造函数 ====================
 
-  constructor(optionsConfig: CoreOptions<TDraft> = {}) {
+  constructor(optionsConfig: FilterOptions<TDraft> = {}) {
+    this.hooks = createFilterHooks<TDraft>();
     this.initialize(optionsConfig);
     this.makeObservable();
     this.makeForm(optionsConfig);
     this.setupApplyEffects();
     this.setupDebouncedApply();
+    this.registerListenersAsHookTaps(optionsConfig.listeners);
   }
 
   // ==================== 初始化方法 ====================
@@ -103,10 +88,9 @@ export class CoreManager<TDraft extends Draft> {
    * 初始化基础配置
    * @internal
    */
-  protected initialize(config: CoreOptions<TDraft>): void {
+  protected initialize(config: FilterOptions<TDraft>): void {
     this.listeners = config.listeners;
     this.defaultValues = config.defaultValues;
-    this.emitFn = config.emitFn;
     this.applyDebounceMs = config.applyDebounceMs;
   }
 
@@ -139,7 +123,7 @@ export class CoreManager<TDraft extends Draft> {
    * 创建 Formily 表单实例
    * @internal
    */
-  protected makeForm(config: CoreOptions<TDraft>): void {
+  protected makeForm(config: FilterOptions<TDraft>): void {
     this.form = createForm({
       initialValues: this.defaultValues,
       values: config.values,
@@ -149,6 +133,71 @@ export class CoreManager<TDraft extends Draft> {
     // previousDraft 初始化为 undefined，第一次值变化时会传递 undefined 作为 prev
     // 这样符合监听器的预期：第一次变化时 prev 应该是 undefined
   }
+
+  /**
+   * 将 FilterListeners 回调注册为 hook taps
+   * 统一到 tapable 体系中，不再直接调用 listeners
+   * @internal
+   */
+  protected registerListenersAsHookTaps(listeners?: FilterListeners<TDraft>): void {
+    if (!listeners) return;
+
+    if (listeners.onDraftChange) {
+      const fn = listeners.onDraftChange;
+      this.hooks.draftChange.tap('listener:onDraftChange', (payload) => {
+        fn(payload.draft, payload.prev);
+      });
+    }
+
+    if (listeners.onApplyStart) {
+      const fn = listeners.onApplyStart;
+      this.hooks.applyStart.tap('listener:onApplyStart', (payload) => {
+        fn({ draft: payload.draft });
+      });
+    }
+
+    if (listeners.onApplySuccess) {
+      const fn = listeners.onApplySuccess;
+      this.hooks.applySuccess.tap('listener:onApplySuccess', (payload) => {
+        fn({ draft: payload.draft, payload: payload.payload });
+      });
+    }
+
+    if (listeners.onValidateFailed) {
+      const fn = listeners.onValidateFailed;
+      this.hooks.validateFailed.tap('listener:onValidateFailed', (payload) => {
+        fn({ draft: payload.draft, errors: payload.errors });
+      });
+    }
+
+    if (listeners.onReset) {
+      const fn = listeners.onReset;
+      this.hooks.reset.tap('listener:onReset', (payload) => {
+        fn({ scope: payload.scope as 'all' | 'field' | 'group', target: payload.target });
+      });
+    }
+
+    if (listeners.onInit) {
+      const fn = listeners.onInit;
+      this.hooks.init.tap('listener:onInit', (payload) => {
+        fn({ root: payload.root });
+      });
+    }
+
+    if (listeners.onDestroy) {
+      const fn = listeners.onDestroy;
+      this.hooks.destroy.tap('listener:onDestroy', () => {
+        // 注意：destroy hook 的 payload 是 {}，但 onDestroy 需要 root
+        // 这里从闭包中获取不到 root，需要在 controller 层处理
+        // 暂时传递一个空占位，controller 会覆盖
+      });
+      // listener:onDestroy 在 controller 层特殊处理
+      this._destroyListenerFn = fn;
+    }
+  }
+
+  /** @internal - 暂存 onDestroy 回调，由 controller 统一调用 */
+  protected _destroyListenerFn?: FilterListeners<TDraft>['onDestroy'];
 
   /**
    * 设置 Apply 流程的事件效果
@@ -170,8 +219,8 @@ export class CoreManager<TDraft extends Draft> {
         this.previousDraft = cloneDeep(nextDraft);
         // 清除 changed 缓存，因为 draft 已变化（onFormValuesChange 已触发，说明值已变化）
         this._changedCache = undefined;
-        this.listeners?.onDraftChange?.(nextDraft, prevDraft);
-        this.emitFn?.('draft:change', {
+        // 通过 hooks 触发事件（统一事件源）
+        this.hooks.draftChange.call({
           draft: cloneDeep(nextDraft),
           prev: cloneDeep(prevDraft),
         });
@@ -182,8 +231,7 @@ export class CoreManager<TDraft extends Draft> {
         // previous 保存 apply 开始时的状态
         this._previous = this.draft;
         const current = form.values as TDraft;
-        this.listeners?.onApplyStart?.({ draft: current });
-        this.emitFn?.('apply:start', { draft: current });
+        this.hooks.applyStart.call({ draft: current });
       });
 
       // 监听提交成功
@@ -202,10 +250,12 @@ export class CoreManager<TDraft extends Draft> {
         // 瀑布流执行，允许插件对 snapshot 进行链式处理
         let transformedApplied = snapshot;
         try {
-          transformedApplied = await this.hooks.processSnapshot.call(
-            snapshot,
-            currentDraft
-          );
+          if (this._hasProcessSnapshotTaps()) {
+            transformedApplied = await this.hooks.processSnapshot.promise(
+              snapshot,
+              currentDraft
+            );
+          }
         } catch (error) {
           // 处理失败，如果有等待的 Promise，reject 它
           if (this.applyReject) {
@@ -227,9 +277,8 @@ export class CoreManager<TDraft extends Draft> {
           applied: transformedApplied,
         };
 
-        // 触发事件，此时 applied 已经是转换后的值
-        this.listeners?.onApplySuccess?.({ draft: currentDraft, payload });
-        this.emitFn?.('apply:success', { draft: currentDraft, payload });
+        // 通过 hooks 触发事件
+        this.hooks.applySuccess.call({ draft: currentDraft, payload });
 
         // 如果有等待的 Promise，resolve 它
         this.applyResolve?.();
@@ -241,10 +290,17 @@ export class CoreManager<TDraft extends Draft> {
       onFormValidateFailed((form) => {
         const errors = form.getState().errors;
         const current = toJS(form.getFormState().values) as TDraft;
-        this.listeners?.onValidateFailed?.({ draft: current, errors });
-        this.emitFn?.('validate:failed', { draft: current, errors });
+        this.hooks.validateFailed.call({ draft: current, errors });
       });
     });
+  }
+
+  /**
+   * 检查 processSnapshot 钩子是否有注册的 tap
+   * @internal
+   */
+  private _hasProcessSnapshotTaps(): boolean {
+    return (this.hooks.processSnapshot as any).taps?.length > 0;
   }
 
   // ==================== 计算属性 (Getters) ====================
@@ -378,7 +434,7 @@ export class CoreManager<TDraft extends Draft> {
 
     // 如果有 hook 监听器，使用 Promise 等待异步完成
     // 注意：Formily 的 submit 不会等待异步 effect 完成，所以需要手动等待
-    if (this.hooks.processSnapshot.isUsed) {
+    if (this._hasProcessSnapshotTaps()) {
       return new Promise<void>((resolve, reject) => {
         this.applyResolve = resolve;
         this.applyReject = reject;
@@ -419,8 +475,7 @@ export class CoreManager<TDraft extends Draft> {
     // 清除 changed 缓存，因为 draft 已重置
     this._changedCache = undefined;
 
-    this.listeners?.onReset?.({ scope: 'all' });
-    this.emitFn?.('reset', { scope: 'all' });
+    this.hooks.reset.call({ scope: 'all' });
   };
 
   /**
@@ -443,7 +498,6 @@ export class CoreManager<TDraft extends Draft> {
     this._previous = undefined;
     this.previousDraft = undefined;
     this._changedCache = undefined;
-    this.emitFn = undefined;
     this.applyDebounceMs = undefined;
     this.applyResolve = undefined;
     this.applyReject = undefined;

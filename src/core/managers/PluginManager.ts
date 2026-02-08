@@ -4,26 +4,17 @@ import type {
   FilterApi,
   PluginFactory,
   PluginDisposeError,
-  FilterEventMap,
 } from '../types';
-import type EventEmitter from 'eventemitter3';
-import { observable, define } from '@formily/reactive';
+import type { FilterHooks } from '../hooks';
+import { observable } from '@formily/reactive';
 
 /**
  * @name 插件管理器
  *
  * @description 负责插件的注册、初始化、生命周期管理和状态维护
- * 通过内部事件总线与其他模块通信
+ * 通过 FilterHooks（tapable）与其他模块通信，替代了原来的 EventEmitter
  *
  * @template TDraft - 筛选器数据类型
- *
- * @example
- * ```ts
- * // 检查插件是否就绪
- * if (filter.plugin.ready) {
- *   console.log('所有插件已就绪');
- * }
- * ```
  */
 /**
  * 插件状态存储（响应式）
@@ -66,7 +57,7 @@ export class PluginManager<TDraft extends Draft> {
   private readonly pluginMap = new Map<string, PluginInfo<TDraft>>();
 
   constructor(
-    private bus: EventEmitter<FilterEventMap<TDraft>>,
+    private hooks: FilterHooks<TDraft>,
     instancePlugins: PluginFactory<TDraft>[],
     globalPlugins: PluginFactory<TDraft>[],
     mergeStrategy: 'prepend' | 'append',
@@ -95,41 +86,42 @@ export class PluginManager<TDraft extends Draft> {
   /**
    * @name setupLifecycleListeners
    * @description 注册插件生命周期钩子监听器
+   * 使用 tapable hooks 替代 EventEmitter 监听
    * @private
    */
   private setupLifecycleListeners(): void {
-    // 监听 draft:change
-    this.bus.on('draft:change', (payload) => {
+    // 监听 draftChange
+    this.hooks.draftChange.tap('PluginManager:draftChange', (payload) => {
       this.plugins.forEach((plugin) => {
-        plugin.onDraftChange?.(payload.draft, payload.prev);
+        (plugin as any).onDraftChange?.(payload.draft, payload.prev);
       });
     });
 
-    // 监听 apply:start
-    this.bus.on('apply:start', (payload) => {
+    // 监听 applyStart
+    this.hooks.applyStart.tap('PluginManager:applyStart', (payload) => {
       this.plugins.forEach((plugin) => {
-        plugin.onApplyStart?.(payload);
+        (plugin as any).onApplyStart?.(payload);
       });
     });
 
-    // 监听 apply:success
-    this.bus.on('apply:success', (payload) => {
+    // 监听 applySuccess
+    this.hooks.applySuccess.tap('PluginManager:applySuccess', (payload) => {
       this.plugins.forEach((plugin) => {
-        plugin.onApplySuccess?.(payload);
+        (plugin as any).onApplySuccess?.(payload);
       });
     });
 
-    // 监听 validate:failed
-    this.bus.on('validate:failed', (payload) => {
+    // 监听 validateFailed
+    this.hooks.validateFailed.tap('PluginManager:validateFailed', (payload) => {
       this.plugins.forEach((plugin) => {
-        plugin.onValidateFailed?.(payload);
+        (plugin as any).onValidateFailed?.(payload);
       });
     });
 
     // 监听 reset
-    this.bus.on('reset', (payload) => {
+    this.hooks.reset.tap('PluginManager:reset', (payload) => {
       this.plugins.forEach((plugin) => {
-        plugin.onReset?.(payload);
+        (plugin as any).onReset?.(payload);
       });
     });
   }
@@ -137,10 +129,6 @@ export class PluginManager<TDraft extends Draft> {
   /**
    * @name mergePluginFactories
    * @description 合并全局插件和实例插件工厂函数
-   * @param instancePlugins - 实例插件工厂函数列表
-   * @param globalPlugins - 全局插件工厂函数列表
-   * @param mergeStrategy - 合并策略：'prepend' 表示实例插件在前，'append' 表示全局插件在前
-   * @returns 合并后的插件工厂函数列表
    * @protected
    */
   protected mergePluginFactories(
@@ -156,9 +144,6 @@ export class PluginManager<TDraft extends Draft> {
   /**
    * @name resolvePluginFactories
    * @description 解析插件工厂函数，将工厂函数转换为插件实例
-   * @param factories - 插件工厂函数列表
-   * @param filterApi - FilterApi 实例，用于传递给工厂函数
-   * @returns 解析后的插件实例列表
    * @protected
    */
   protected resolvePluginFactories(
@@ -195,7 +180,6 @@ export class PluginManager<TDraft extends Draft> {
   /**
    * @name initializePluginMap
    * @description 初始化插件映射表和就绪状态
-   * @param plugins - 插件实例列表
    * @protected
    */
   protected initializePluginMap(plugins: Plugin<TDraft>[]): void {
@@ -217,22 +201,16 @@ export class PluginManager<TDraft extends Draft> {
   /**
    * @name markReady
    * @description 标记插件就绪状态（供插件内部调用）
-   * @param pluginName - 插件名称
-   * @param ready - 是否就绪
-   * @param error - 错误信息（可选）
    * @internal
    */
   markReady(pluginName: string, ready: boolean, error?: unknown): void {
-    // console.log(`[PluginManager] markReady: ${pluginName} = ${ready}`);
     this.pluginReady.set(pluginName, { ready, error });
-    this.bus.emit('plugin:ready', { name: pluginName, ready, error });
+    this.hooks.pluginReady.call({ name: pluginName, ready, error });
   }
 
   /**
    * @name isReady
    * @description 检查指定插件是否就绪
-   * @param pluginName - 插件名称
-   * @returns 是否就绪
    */
   isReady(pluginName: string): boolean {
     return this.pluginReady.get(pluginName)?.ready === true;
@@ -241,12 +219,11 @@ export class PluginManager<TDraft extends Draft> {
   /**
    * @name runInit
    * @description 执行所有插件的初始化钩子
-   * @param filter - FilterApi 实例
    * @internal
    */
   async runInit(filter: FilterApi<TDraft>): Promise<void> {
     // 发送插件挂载事件
-    this.bus.emit('plugins:attached', { total: this.plugins.length });
+    this.hooks.pluginsAttached.call({ total: this.plugins.length });
 
     // 按照插件注册顺序执行初始化
     for (const plugin of this.plugins) {
@@ -267,7 +244,7 @@ export class PluginManager<TDraft extends Draft> {
         this.markReady(plugin.name, true);
       }
     }
-    this.bus.emit('plugins:ready', { ready: this.ready });
+    this.hooks.pluginsReady.call({ ready: this.ready });
   }
 
   dispose(): { errors: PluginDisposeError[] } {
@@ -287,7 +264,7 @@ export class PluginManager<TDraft extends Draft> {
     this.pluginMap.clear();
     this.pluginReady.clear();
 
-    this.bus.emit('plugins:destroyed', { errors });
+    this.hooks.pluginsDestroyed.call({ errors });
 
     return { errors };
   }
@@ -296,8 +273,6 @@ export class PluginManager<TDraft extends Draft> {
   /**
    * @name ready
    * @description 所有插件是否都已就绪
-   * @type {boolean}
-   * @readonly
    */
   get ready(): boolean {
     return Array.from(this.pluginReady.values()).every(({ ready }) => ready);
@@ -306,8 +281,6 @@ export class PluginManager<TDraft extends Draft> {
   /**
    * @name setState
    * @description 设置指定插件的状态（响应式）
-   * @param pluginName - 插件名称
-   * @param state - 状态对象或更新函数
    * @internal
    */
   setState<T = Record<string, unknown>>(
@@ -335,8 +308,6 @@ export class PluginManager<TDraft extends Draft> {
   /**
    * @name getState
    * @description 获取指定插件的状态
-   * @param pluginName - 插件名称
-   * @returns 插件的状态对象
    * @internal
    */
   getState<T = Record<string, unknown>>(pluginName: string): T | undefined {
@@ -345,19 +316,7 @@ export class PluginManager<TDraft extends Draft> {
 
   /**
    * @name get
-   * @description 获取指定插件的公开信息（包含插件实例、响应式状态、就绪状态）
-   * @param pluginName - 插件名称
-   * @returns 插件公开信息，如果插件不存在则返回 undefined
-   *
-   * @example
-   * ```ts
-   * // 获取 codec 插件信息
-   * const codecInfo = filter.plugin.get('codec-plugin');
-   * if (codecInfo) {
-   *   console.log('插件就绪:', codecInfo.ready);
-   *   console.log('转换状态:', codecInfo.state.transformState);
-   * }
-   * ```
+   * @description 获取指定插件的公开信息
    */
   get(pluginName: string): PluginPublicInfo<TDraft> | undefined {
     const pluginInfo = this.pluginMap.get(pluginName);
@@ -378,8 +337,6 @@ export class PluginManager<TDraft extends Draft> {
   /**
    * @name has
    * @description 检查指定插件是否已注册
-   * @param pluginName - 插件名称
-   * @returns 是否存在该插件
    */
   has(pluginName: string): boolean {
     return this.pluginMap.has(pluginName);
@@ -388,10 +345,8 @@ export class PluginManager<TDraft extends Draft> {
   /**
    * @name list
    * @description 获取所有已注册插件的名称列表
-   * @returns 插件名称数组
    */
   list(): string[] {
     return Array.from(this.pluginMap.keys());
   }
-
 }

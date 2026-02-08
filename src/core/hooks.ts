@@ -1,65 +1,95 @@
+import {
+  SyncHook,
+  AsyncSeriesWaterfallHook,
+} from 'tapable';
+import type { Form } from '@formily/core';
+import type { Draft, ApplySuccessPayload, PluginDisposeError, FilterApi } from './types';
+
 /**
- * 异步串行瀑布流钩子
+ * FilterHooks - 基于 tapable 的统一钩子注册表
  *
- * 类似于 tapable 的 AsyncSeriesWaterfallHook
- * 上一个监听器的返回值会作为下一个监听器的第一个参数
+ * 这是整个 Filter 系统的唯一事件源，替代了之前的：
+ * 1. EventEmitter3 事件总线
+ * 2. FilterListeners 回调
+ * 3. 自制 AsyncSeriesWaterfallHook
+ *
+ * 所有模块间通信、插件生命周期、数据转换管道都通过此注册表完成。
+ *
+ * @template TDraft - 草稿数据类型
  */
-export class AsyncSeriesWaterfallHook<T, TContext = unknown> {
-  private taps: Array<{
-    name: string;
-    fn: (data: T, context: TContext) => Promise<T>;
-  }> = [];
+export function createFilterHooks<TDraft extends Draft>() {
+  return {
+    // ==================== 核心生命周期钩子 ====================
 
-  constructor(private args: string[] = []) {}
+    /** Filter 实例初始化完成 */
+    init: new SyncHook<[{ root: FilterApi<TDraft> }]>(['context']),
 
-  /**
-   * 注册监听器（同步）
-   * @param name - 监听器名称
-   * @param fn - 处理函数，接收数据和上下文，返回处理后的数据
-   * @returns 取消注册的函数
-   */
-  tap(
-    name: string,
-    fn: (data: T, context: TContext) => T
-  ): () => void {
-    return this.tapPromise(name, async (data, context) => fn(data, context));
-  }
+    /**
+     * Filter 实例完全就绪
+     * 触发条件：Formily Form 已挂载 + 所有插件初始化完成
+     */
+    ready: new SyncHook<[{ root: FilterApi<TDraft> }]>(['context']),
 
-  /**
-   * 注册监听器（支持异步）
-   * @param name - 监听器名称
-   * @param fn - 处理函数，接收数据和上下文，返回处理后的数据
-   * @returns 取消注册的函数
-   */
-  tapPromise(
-    name: string,
-    fn: (data: T, context: TContext) => Promise<T>
-  ): () => void {
-    this.taps.push({ name, fn });
-    return () => {
-      this.taps = this.taps.filter((t) => t.name !== name);
-    };
-  }
+    /** Filter 实例销毁 */
+    destroy: new SyncHook<[{}]>(['context']),
 
-  /**
-   * 触发钩子执行
-   * @param initialValue - 初始值
-   * @param context - 上下文数据（透传给所有监听器，不会被修改）
-   * @returns 最终处理后的值
-   */
-  async call(initialValue: T, context: TContext): Promise<T> {
-    let result = initialValue;
-    for (const { fn } of this.taps) {
-      result = await fn(result, context);
-    }
-    return result;
-  }
+    // ==================== 数据流钩子 ====================
 
-  /**
-   * 检查是否有注册的监听器
-   */
-  get isUsed(): boolean {
-    return this.taps.length > 0;
-  }
+    /** 草稿数据变更 */
+    draftChange: new SyncHook<[{ draft: TDraft; prev?: TDraft }]>(['payload']),
+
+    /** Apply 流程开始（验证 + 快照前） */
+    applyStart: new SyncHook<[{ draft: TDraft }]>(['payload']),
+
+    /** Apply 流程成功（快照已创建） */
+    applySuccess: new SyncHook<[{ draft: TDraft; payload: ApplySuccessPayload<TDraft> }]>(['payload']),
+
+    /** 表单验证失败 */
+    validateFailed: new SyncHook<[{ draft: TDraft; errors: Form['errors'] }]>(['payload']),
+
+    /** 表单重置 */
+    reset: new SyncHook<[{ scope: 'all' | 'group' | string; target?: string }]>(['payload']),
+
+    // ==================== 数据转换管道（瀑布流） ====================
+
+    /**
+     * 快照处理钩子（AsyncSeriesWaterfallHook）
+     *
+     * 在 apply 成功后，对 applied 快照进行链式处理（如 codec 编码、数据清洗等）
+     * 第一个参数 snapshot 是瀑布流值（上一个 tap 的返回值传给下一个），
+     * 第二个参数 currentDraft 是当前的草稿数据（透传，不会被修改）。
+     */
+    processSnapshot: new AsyncSeriesWaterfallHook<[TDraft, TDraft]>(['snapshot', 'currentDraft']),
+
+    // ==================== 插件生命周期钩子 ====================
+
+    /** 单个插件就绪状态变更 */
+    pluginReady: new SyncHook<[{ name: string; ready: boolean; error?: unknown }]>(['payload']),
+
+    /** 所有插件就绪状态汇总 */
+    pluginsReady: new SyncHook<[{ ready: boolean }]>(['payload']),
+
+    /** 插件已挂载 */
+    pluginsAttached: new SyncHook<[{ total: number }]>(['payload']),
+
+    /** 插件已销毁 */
+    pluginsDestroyed: new SyncHook<[{ errors: PluginDisposeError[] }]>(['payload']),
+  };
 }
 
+/**
+ * FilterHooks 类型（从工厂函数推断）
+ */
+export type FilterHooks<TDraft extends Draft> = ReturnType<typeof createFilterHooks<TDraft>>;
+
+/**
+ * FilterHooks 事件名到 payload 类型的映射
+ * 用于 on/off/once 的类型推导
+ */
+export type FilterHookMap<TDraft extends Draft> = {
+  [K in keyof FilterHooks<TDraft>]: FilterHooks<TDraft>[K] extends SyncHook<[infer P]>
+    ? P
+    : FilterHooks<TDraft>[K] extends AsyncSeriesWaterfallHook<[infer P, ...any[]]>
+    ? P
+    : never;
+};

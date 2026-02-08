@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import type { CoreManager } from './managers';
 import type { PluginManager } from './managers/PluginManager';
 import type { OptionsRuntimeConfig } from '../hooks/useOptions/types';
+import type { FilterHooks, FilterHookMap } from './hooks';
 
 export type Draft = Record<string, any>;
 export type JsonRecord = Record<string, unknown>;
@@ -24,7 +25,25 @@ export interface ApplySuccessPayload<TDraft extends Draft = Draft> {
   applied: TDraft;
 }
 
+/**
+ * FilterEventMap - 事件名到 payload 类型的映射
+ *
+ * 使用冒号分隔的事件名（兼容旧 API）与 FilterHooks 的驼峰命名一一对应：
+ * - 'draft:change' → hooks.draftChange
+ * - 'apply:start' → hooks.applyStart
+ * - 'apply:success' → hooks.applySuccess
+ * - 'validate:failed' → hooks.validateFailed
+ * - 'plugin:ready' → hooks.pluginReady
+ * - 'plugins:ready' → hooks.pluginsReady
+ * - 'plugins:attached' → hooks.pluginsAttached
+ * - 'plugins:destroyed' → hooks.pluginsDestroyed
+ * - 'ready' → hooks.ready
+ * - 'reset' → hooks.reset
+ * - 'destroy' → hooks.destroy
+ * - 'init' → hooks.init
+ */
 export interface FilterEventMap<TDraft extends Draft = Draft> {
+  'init': { root: FilterApi<TDraft> };
   'draft:change': { draft: TDraft; prev?: TDraft };
   'apply:start': { draft: TDraft };
   'apply:success': { draft: TDraft; payload: ApplySuccessPayload<TDraft> };
@@ -44,6 +63,24 @@ export interface FilterEventMap<TDraft extends Draft = Draft> {
   'ready': { root: FilterApi<TDraft> };
 }
 
+/**
+ * 事件名 → hook 名的映射类型
+ */
+export type EventToHookName = {
+  'init': 'init';
+  'draft:change': 'draftChange';
+  'apply:start': 'applyStart';
+  'apply:success': 'applySuccess';
+  'validate:failed': 'validateFailed';
+  'reset': 'reset';
+  'plugin:ready': 'pluginReady';
+  'plugins:ready': 'pluginsReady';
+  'plugins:attached': 'pluginsAttached';
+  'plugins:destroyed': 'pluginsDestroyed';
+  'destroy': 'destroy';
+  'ready': 'ready';
+};
+
 export interface FilterEvents<TDraft extends Draft = Draft> {
   on<K extends keyof FilterEventMap<TDraft>>(
     event: K,
@@ -57,28 +94,6 @@ export interface FilterEvents<TDraft extends Draft = Draft> {
     event: K,
     listener: (payload: FilterEventMap<TDraft>[K]) => void
   ): void;
-}
-
-// 内部总线（模块用）可有 emit，但不对外暴露
-export interface InternalFilterBus<TDraft extends Draft = Draft> extends FilterEvents<TDraft> {
-  emit<K extends keyof FilterEventMap<TDraft>>(event: K, payload: FilterEventMap<TDraft>[K]): void;
-}
-
-// 模块契约（后续模块化装配使用）
-export interface ModuleContext<TDraft extends Draft = Draft> {
-  root: FilterApi<TDraft>;
-  bus: InternalFilterBus<TDraft>;
-  setReady(ready: boolean, err?: unknown): void;
-  isReady(): boolean;
-}
-
-export interface Module<TDraft extends Draft = Draft, TOptions = unknown> {
-  readonly name: string;
-  readonly namespace: string;
-  readonly requires?: string[];
-  init(ctx: ModuleContext<TDraft>, options?: TOptions): void | Promise<void>;
-  getPublicApi(): unknown;
-  dispose?(): void | Promise<void>;
 }
 
 export interface PluginInitContext<TDraft extends Draft = Draft> {
@@ -203,8 +218,13 @@ export interface FilterApi<TDraft extends Draft = Draft>
   /** 插件命名空间 - 直接暴露 PluginManager 实例 */
   readonly plugin: PluginManager<TDraft>;
 
-  /** 核心钩子系统 */
-  readonly hooks: CoreManager<TDraft>['hooks'];
+  /**
+   * 统一钩子注册表（基于 tapable）
+   *
+   * 暴露给插件和高级用户，可通过 hooks.xxx.tap() 注册拦截器。
+   * 这是整个系统的唯一事件源。
+   */
+  readonly hooks: FilterHooks<TDraft>;
 
   /**
    * 销毁当前过滤器实例，触发所有插件和监听器的清理逻辑
