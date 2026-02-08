@@ -34,8 +34,8 @@ describe('CoreManager - 完整功能测试', () => {
   describe('属性和初始化', () => {
     it('应该正确初始化所有属性', () => {
       expect(manager.form).toBeDefined();
-      expect(manager.listeners).toBeUndefined();
       expect(manager.defaultValues).toEqual(defaultValues);
+      expect(manager.hooks).toBeDefined();
     });
 
     it('响应式属性应该初始化为 undefined', () => {
@@ -893,7 +893,6 @@ describe('CoreManager - 完整功能测试', () => {
       managerToDispose['dispose']();
 
       // 验证资源已清理
-      expect(managerToDispose.listeners).toBeUndefined();
       expect(managerToDispose.defaultValues).toBeUndefined();
       expect(managerToDispose.applied).toBeUndefined();
       expect(managerToDispose.previous).toBeUndefined();

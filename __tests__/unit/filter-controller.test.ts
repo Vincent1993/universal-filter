@@ -92,7 +92,7 @@ describe('FilterController - 生命周期与事件', () => {
     // removeEffects 应该在 super.dispose 中被调用
     expect(removeEffectsSpy).toHaveBeenCalledWith('filter-apply');
     expect(filter.form.unmounted).toBe(true);
-    expect(filter.listeners).toBeUndefined();
+    expect(filter.defaultValues).toBeUndefined();
   });
 
   it('插件销毁异常时应该继续销毁其他插件并上报错误', () => {
