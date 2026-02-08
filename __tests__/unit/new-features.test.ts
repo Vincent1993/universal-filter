@@ -81,7 +81,8 @@ describe('beforeApply BailHook', () => {
     const filter = createFilter({ defaultValues: { a: 1 } });
     filter.hooks.applySuccess.tap('spy', applySuccessSpy);
 
-    filter.hooks.beforeApply.tap('pass', (() => { /* 不拦截 */ }) as never);
+    // @ts-expect-error tapable SyncBailHook requires boolean return, but undefined means "don't bail"
+    filter.hooks.beforeApply.tap('pass', () => { /* 不拦截 */ });
     filter.hooks.beforeApply.tap('block', (): boolean => true);
 
     await waitForPluginsReady(filter);

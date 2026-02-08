@@ -286,6 +286,7 @@ describe('FilterProvider', () => {
         return <div data-testid="recovered">已恢复</div>;
       }
 
+      // resetKeys accepts string | number; use distinct numbers to trigger reset on change
       const { rerender, unmount } = rtlRender(
         <FilterProvider instance={testFilter} resetKeys={[1]}>
           <ConditionalError shouldThrow={true} />
