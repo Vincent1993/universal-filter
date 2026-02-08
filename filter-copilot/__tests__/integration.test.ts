@@ -176,7 +176,7 @@ describe('createFilterCopilot - 集成测试', () => {
       const copilot = createFilterCopilot({ userId: 'u1', filterDefs })
       copilot.record({ sequence: ['category', 'brand'] })
 
-      const data = copilot.export() as { transitions: Record<string, Record<string, number>>; frequency: Record<string, number> }
+      const data = copilot.export()
       expect(data.frequency.category).toBe(1)
       expect(data.frequency.brand).toBe(1)
       expect(data.transitions.category.brand).toBe(1)
@@ -204,7 +204,7 @@ describe('createFilterCopilot - 集成测试', () => {
         true,
       )
 
-      const data = copilot.export() as { transitions: Record<string, Record<string, number>>; frequency: Record<string, number> }
+      const data = copilot.export()
       expect(data.frequency.category).toBe(6) // 1 + 5
       expect(data.transitions.category.brand).toBe(6) // 1 + 5
     })
@@ -236,7 +236,7 @@ describe('createFilterCopilot - 集成测试', () => {
       copilot.record({ sequence: ['category', 'brand'] })
       copilot.reset()
 
-      const data = copilot.export() as { transitions: Record<string, Record<string, number>>; frequency: Record<string, number> }
+      const data = copilot.export()
       expect(Object.keys(data.frequency).length).toBe(0)
       expect(Object.keys(data.transitions).length).toBe(0)
     })
