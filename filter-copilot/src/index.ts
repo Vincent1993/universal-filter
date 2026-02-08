@@ -243,11 +243,17 @@ export async function createFilterCopilotAsync(
   return buildInstance(behaviorStore, recommender, syncPlugin, adapter)
 }
 
-// ──────────────── 导出 ────────────────
+// ──────────────── 工具函数 ────────────────
+
+export { sortOptions, mergeSearchResults } from './utils/sortOptions'
+
+// ──────────────── 导出类型 ────────────────
 
 export type { FilterDef, FilterDefs, FilterSelection } from './types/Filter'
 export type { FilterAction } from './types/Behavior'
 export type { Suggestion, ValueSuggestion } from './types/Suggestion'
+export type { OptionItem, ScoredOption, ValueSourceConfig, ValueSourceType, AsyncLoaderParams, SearchLoaderParams } from './types/Option'
 export type { RecommendOptions, RecommendValuesOptions } from './core/Recommender'
 export type { BehaviorData } from './core/BehaviorStore'
 export type { StorageAdapter, PersistOptions } from './types/Storage'
+export type { SortOptionsParams, MergeSearchParams } from './utils/sortOptions'

@@ -19,6 +19,12 @@ export type { UseRecommendationsReturn } from './useRecommendations'
 export { useValueRecommendations } from './useValueRecommendations'
 export type { UseValueRecommendationsReturn } from './useValueRecommendations'
 
+export { useSortedOptions } from './useSortedOptions'
+export type { UseSortedOptionsReturn } from './useSortedOptions'
+
+export { useFilterOptions } from './useFilterOptions'
+export type { UseFilterOptionsReturn } from './useFilterOptions'
+
 export { useRecorder } from './useRecorder'
 export type { UseRecorderReturn } from './useRecorder'
 
@@ -26,5 +32,6 @@ export type { UseRecorderReturn } from './useRecorder'
 export type { Suggestion, ValueSuggestion } from '../types/Suggestion'
 export type { FilterAction } from '../types/Behavior'
 export type { FilterDef, FilterDefs, FilterSelection } from '../types/Filter'
+export type { OptionItem, ScoredOption, ValueSourceConfig } from '../types/Option'
 export type { RecommendOptions, RecommendValuesOptions } from '../core/Recommender'
 export type { CreateFilterCopilotOptions, FilterCopilotInstance } from '../index'
