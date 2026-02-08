@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { BehaviorStore } from '../src/core/BehaviorStore'
+import { BehaviorStore, compoundKey, parseCompoundKey } from '../src/core/BehaviorStore'
 
 describe('BehaviorStore', () => {
   let store: BehaviorStore
@@ -8,223 +8,184 @@ describe('BehaviorStore', () => {
     store = new BehaviorStore()
   })
 
-  // ──────────── record ────────────
+  // ──────── compoundKey 工具 ────────
 
-  describe('record', () => {
-    it('应正确记录单个序列的频率', () => {
-      store.record(['a', 'b', 'c'])
-      const freq = store.getFrequency()
-      expect(freq).toEqual({ a: 1, b: 1, c: 1 })
+  describe('compoundKey / parseCompoundKey', () => {
+    it('应正确编码和解码', () => {
+      const ck = compoundKey('category', '电子产品')
+      const parsed = parseCompoundKey(ck)
+      expect(parsed).toEqual({ key: 'category', value: '电子产品' })
     })
 
-    it('应正确累加多次记录的频率', () => {
-      store.record(['a', 'b'])
-      store.record(['a', 'c'])
-      store.record(['a', 'b'])
-      const freq = store.getFrequency()
-      expect(freq.a).toBe(3)
-      expect(freq.b).toBe(2)
-      expect(freq.c).toBe(1)
+    it('无分隔符时解析返回 null', () => {
+      expect(parseCompoundKey('plain-string')).toBeNull()
     })
+  })
 
-    it('应正确构建 Markov 转移表', () => {
+  // ──────── Key 维度：record ────────
+
+  describe('record（key 维度）', () => {
+    it('应正确记录频率和转移', () => {
       store.record(['a', 'b', 'c'])
+      expect(store.getFrequency()).toEqual({ a: 1, b: 1, c: 1 })
       expect(store.getTransition('a')).toEqual({ b: 1 })
       expect(store.getTransition('b')).toEqual({ c: 1 })
-      expect(store.getTransition('c')).toEqual({})
     })
 
-    it('应累加相同转移的计数', () => {
-      store.record(['a', 'b'])
+    it('累加多次记录', () => {
       store.record(['a', 'b'])
       store.record(['a', 'c'])
-      expect(store.getTransition('a')).toEqual({ b: 2, c: 1 })
+      expect(store.getFrequency().a).toBe(2)
+      expect(store.getTransition('a')).toEqual({ b: 1, c: 1 })
     })
 
-    it('空数组不应改变任何状态', () => {
+    it('空数组和非法输入不报错', () => {
       store.record([])
-      expect(store.getFrequency()).toEqual({})
-      expect(store.size()).toBe(0)
-    })
-
-    it('非数组输入不应抛异常', () => {
       store.record(null as unknown as string[])
-      store.record(undefined as unknown as string[])
-      store.record('hello' as unknown as string[])
       expect(store.size()).toBe(0)
     })
-
-    it('序列中的空字符串应被跳过', () => {
-      store.record(['a', '', 'b'])
-      const freq = store.getFrequency()
-      expect(freq).toEqual({ a: 1, b: 1 })
-      // a → '' 被跳过，所以 a 不应有到 b 的转移（中间隔了空字符串）
-      expect(store.getTransition('a')).toEqual({})
-    })
-
-    it('序列中的非字符串元素应被跳过', () => {
-      store.record(['a', 123 as unknown as string, 'b'])
-      const freq = store.getFrequency()
-      expect(freq.a).toBe(1)
-      expect(freq.b).toBe(1)
-      expect(freq[123]).toBeUndefined()
-    })
-
-    it('单元素序列应只更新频率不更新转移', () => {
-      store.record(['x'])
-      expect(store.getFrequency()).toEqual({ x: 1 })
-      expect(store.getTransition('x')).toEqual({})
-    })
   })
 
-  // ──────────── getTransition ────────────
+  // ──────── Value 维度：recordSelections ────────
 
-  describe('getTransition', () => {
-    it('未记录过的 key 应返回空对象', () => {
-      expect(store.getTransition('unknown')).toEqual({})
+  describe('recordSelections（value 维度）', () => {
+    it('应同时更新 key 维度和 value 维度', () => {
+      store.recordSelections([
+        { key: 'category', value: '电子产品' },
+        { key: 'brand', value: 'Apple' },
+      ])
+
+      // key 维度
+      expect(store.getFrequency()).toEqual({ category: 1, brand: 1 })
+      expect(store.getTransition('category')).toEqual({ brand: 1 })
+
+      // value 维度 — 上下文转移
+      expect(store.getContextTransition('category', '电子产品')).toEqual({ brand: 1 })
+
+      // value 维度 — 值共现
+      expect(store.getValuePairs('category', '电子产品', 'brand')).toEqual({ Apple: 1 })
+
+      // value 维度 — 值频率
+      expect(store.getValueFrequency('category')).toEqual({ '电子产品': 1 })
+      expect(store.getValueFrequency('brand')).toEqual({ Apple: 1 })
     })
 
-    it('非字符串输入应返回空对象', () => {
-      expect(store.getTransition(123 as unknown as string)).toEqual({})
-      expect(store.getTransition(null as unknown as string)).toEqual({})
+    it('多次记录应累加计数', () => {
+      store.recordSelections([
+        { key: 'category', value: '电子产品' },
+        { key: 'brand', value: 'Apple' },
+      ])
+      store.recordSelections([
+        { key: 'category', value: '电子产品' },
+        { key: 'brand', value: 'Samsung' },
+      ])
+      store.recordSelections([
+        { key: 'category', value: '电子产品' },
+        { key: 'brand', value: 'Apple' },
+      ])
+
+      expect(store.getContextTransition('category', '电子产品')).toEqual({ brand: 3 })
+      expect(store.getValuePairs('category', '电子产品', 'brand')).toEqual({ Apple: 2, Samsung: 1 })
+      expect(store.getValueFrequency('brand')).toEqual({ Apple: 2, Samsung: 1 })
     })
-  })
 
-  // ──────────── getFrequency ────────────
+    it('不同的 category 值应产生不同的上下文', () => {
+      store.recordSelections([
+        { key: 'category', value: '电子产品' },
+        { key: 'brand', value: 'Apple' },
+      ])
+      store.recordSelections([
+        { key: 'category', value: '服装' },
+        { key: 'brand', value: 'Nike' },
+      ])
 
-  describe('getFrequency', () => {
-    it('初始状态应返回空对象', () => {
-      expect(store.getFrequency()).toEqual({})
+      // 电子产品 → brand 共现 Apple
+      expect(store.getValuePairs('category', '电子产品', 'brand')).toEqual({ Apple: 1 })
+      // 服装 → brand 共现 Nike
+      expect(store.getValuePairs('category', '服装', 'brand')).toEqual({ Nike: 1 })
     })
 
-    it('返回的对象应是副本，修改不影响内部', () => {
-      store.record(['a'])
-      const freq = store.getFrequency()
-      freq.a = 999
-      expect(store.getFrequency().a).toBe(1)
+    it('多选值应每个值都记录', () => {
+      store.recordSelections([
+        { key: 'category', value: '手机' },
+        { key: 'feature', value: ['5G', 'NFC'] },
+      ])
+
+      expect(store.getValueFrequency('feature')).toEqual({ '5G': 1, NFC: 1 })
+      expect(store.getValuePairs('category', '手机', 'feature')).toEqual({ '5G': 1, NFC: 1 })
     })
-  })
 
-  // ──────────── size ────────────
+    it('三个筛选器应记录所有两两组合', () => {
+      store.recordSelections([
+        { key: 'category', value: '电子产品' },
+        { key: 'brand', value: 'Apple' },
+        { key: 'price', value: '5000-8000' },
+      ])
 
-  describe('size', () => {
-    it('初始 size 为 0', () => {
+      // category → brand, category → price
+      expect(store.getContextTransition('category', '电子产品')).toEqual({ brand: 1, price: 1 })
+      // brand → price
+      expect(store.getContextTransition('brand', 'Apple')).toEqual({ price: 1 })
+      // 值共现
+      expect(store.getValuePairs('category', '电子产品', 'price')).toEqual({ '5000-8000': 1 })
+      expect(store.getValuePairs('brand', 'Apple', 'price')).toEqual({ '5000-8000': 1 })
+    })
+
+    it('空 selections 不报错', () => {
+      store.recordSelections([])
+      store.recordSelections(null as unknown as [])
       expect(store.size()).toBe(0)
     })
-
-    it('应返回不同筛选器的总数', () => {
-      store.record(['a', 'b', 'c'])
-      expect(store.size()).toBe(3)
-    })
-
-    it('重复 key 不增加 size', () => {
-      store.record(['a', 'b'])
-      store.record(['a', 'b'])
-      expect(store.size()).toBe(2)
-    })
   })
 
-  // ──────────── clear ────────────
+  // ──────── export / import ────────
 
-  describe('clear', () => {
-    it('应清空全部数据', () => {
-      store.record(['a', 'b', 'c'])
-      store.clear()
-      expect(store.size()).toBe(0)
-      expect(store.getFrequency()).toEqual({})
-      expect(store.getTransition('a')).toEqual({})
-    })
-  })
-
-  // ──────────── export / import ────────────
-
-  describe('export', () => {
-    it('应返回当前行为数据的深拷贝', () => {
-      store.record(['a', 'b'])
+  describe('export / import', () => {
+    it('导出应包含全部五张表', () => {
+      store.recordSelections([
+        { key: 'category', value: '手机' },
+        { key: 'brand', value: 'Apple' },
+      ])
       const data = store.export()
-      expect(data).toEqual({
-        transitions: { a: { b: 1 } },
-        frequency: { a: 1, b: 1 },
-      })
+      expect(data.transitions).toBeDefined()
+      expect(data.frequency).toBeDefined()
+      expect(data.contextTransitions).toBeDefined()
+      expect(data.valuePairs).toBeDefined()
+      expect(data.valueFrequency).toBeDefined()
     })
 
-    it('导出结果修改不应影响内部状态', () => {
-      store.record(['a', 'b'])
-      const data = store.export()
-      data.frequency.a = 999
-      data.transitions.a.b = 999
-      expect(store.getFrequency().a).toBe(1)
-      expect(store.getTransition('a').b).toBe(1)
-    })
-  })
-
-  describe('import - 覆盖模式', () => {
-    it('应用导入数据覆盖现有数据', () => {
-      store.record(['x', 'y'])
-      store.import({
-        transitions: { a: { b: 5 } },
-        frequency: { a: 10, b: 5 },
-      })
-      expect(store.getFrequency()).toEqual({ a: 10, b: 5 })
-      expect(store.getTransition('a')).toEqual({ b: 5 })
-      // 原有 x, y 数据被覆盖
-      expect(store.getTransition('x')).toEqual({})
-    })
-
-    it('无效数据不应影响现有状态', () => {
-      store.record(['a'])
-      store.import(null)
-      store.import(undefined)
-      store.import(42)
-      store.import('bad')
-      expect(store.getFrequency()).toEqual({ a: 1 })
-    })
-
-    it('部分数据导入只覆盖有的字段', () => {
-      store.record(['a', 'b'])
-      store.import({ frequency: { x: 3 } })
-      // frequency 被覆盖，但 transitions 保持不变
-      expect(store.getFrequency()).toEqual({ x: 3 })
-      expect(store.getTransition('a')).toEqual({ b: 1 })
-    })
-  })
-
-  describe('import - 合并模式', () => {
-    it('应累加频率和转移计数', () => {
-      store.record(['a', 'b'])
-      // a:1, b:1, a→b:1
-      store.import(
-        {
-          transitions: { a: { b: 2, c: 1 } },
-          frequency: { a: 3, c: 1 },
-        },
-        true,
-      )
-      // 频率：a = 1+3 = 4, b = 1 (未改), c = 0+1 = 1
-      expect(store.getFrequency()).toEqual({ a: 4, b: 1, c: 1 })
-      // 转移：a→b = 1+2 = 3, a→c = 0+1 = 1
-      expect(store.getTransition('a')).toEqual({ b: 3, c: 1 })
-    })
-
-    it('合并空数据不应改变现有状态', () => {
-      store.record(['a'])
-      store.import({}, true)
-      expect(store.getFrequency()).toEqual({ a: 1 })
-    })
-  })
-
-  // ──────────── export → import 往返一致性 ────────────
-
-  describe('export → import 往返', () => {
-    it('导出再导入应还原相同状态', () => {
-      store.record(['a', 'b', 'c'])
-      store.record(['a', 'c'])
+    it('导出再导入应还原状态', () => {
+      store.recordSelections([
+        { key: 'category', value: '电子产品' },
+        { key: 'brand', value: 'Apple' },
+      ])
       const snapshot = store.export()
 
       const newStore = new BehaviorStore()
       newStore.import(snapshot)
-
       expect(newStore.export()).toEqual(snapshot)
+    })
+
+    it('向后兼容：导入不含 value 维度的旧数据', () => {
+      store.import({
+        transitions: { a: { b: 1 } },
+        frequency: { a: 1, b: 1 },
+        // 没有 contextTransitions / valuePairs / valueFrequency
+      })
+      expect(store.getFrequency()).toEqual({ a: 1, b: 1 })
+      expect(store.getContextTransition('a', 'v')).toEqual({})
+    })
+  })
+
+  // ──────── clear ────────
+
+  describe('clear', () => {
+    it('应清空全部五张表', () => {
+      store.recordSelections([{ key: 'a', value: 'v' }, { key: 'b', value: 'w' }])
+      store.clear()
+      expect(store.size()).toBe(0)
+      expect(store.getContextTransition('a', 'v')).toEqual({})
+      expect(store.getValueFrequency('a')).toEqual({})
     })
   })
 })

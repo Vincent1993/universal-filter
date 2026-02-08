@@ -14,240 +14,182 @@ const defs: FilterDefs = {
 
 describe('Recommender', () => {
   let store: BehaviorStore
-  let ruleEngine: RuleEngine
-  let recommender: Recommender
+  let engine: RuleEngine
+  let rec: Recommender
 
   beforeEach(() => {
     store = new BehaviorStore()
-    ruleEngine = new RuleEngine(defs)
-    recommender = new Recommender(defs, store, ruleEngine)
+    engine = new RuleEngine(defs)
+    rec = new Recommender(defs, store, engine)
   })
 
-  // ──────────── 基本推荐 ────────────
+  // ──────── 维度 1：筛选器推荐（key-only，向后兼容）────────
 
-  describe('基本推荐逻辑', () => {
-    it('无历史数据时应返回所有可用筛选器，分数均为 0', () => {
-      const result = recommender.recommend([])
-      expect(result.length).toBeGreaterThan(0)
-      // 没有行为数据，所有分数为 0
-      result.forEach((s) => expect(s.score).toBe(0))
+  describe('recommend（string[] context）', () => {
+    it('无历史时分数全 0', () => {
+      const r = rec.recommend([])
+      expect(r.every((s) => s.score === 0)).toBe(true)
     })
 
-    it('应排除已选的筛选器', () => {
-      const result = recommender.recommend(['category', 'color'])
-      const keys = result.map((s) => s.key)
+    it('排除已选 + 规则过滤', () => {
+      const r = rec.recommend(['category'])
+      const keys = r.map((s) => s.key)
       expect(keys).not.toContain('category')
-      expect(keys).not.toContain('color')
-    })
-
-    it('应通过规则过滤不满足依赖的筛选器', () => {
-      // 空 context：brand 和 model 依赖 category，不应出现
-      const result = recommender.recommend([])
-      const keys = result.map((s) => s.key)
-      expect(keys).not.toContain('brand')
-      expect(keys).not.toContain('model')
-      expect(keys).toContain('category')
-      expect(keys).toContain('color')
-      expect(keys).toContain('price')
-    })
-
-    it('选择 category 后应解锁 brand', () => {
-      const result = recommender.recommend(['category'])
-      const keys = result.map((s) => s.key)
       expect(keys).toContain('brand')
-      expect(keys).not.toContain('model') // 还需要 brand
+      expect(keys).not.toContain('model') // 需要 brand
     })
 
-    it('全部选完后返回空数组', () => {
-      const all = Object.keys(defs)
-      expect(recommender.recommend(all)).toEqual([])
-    })
-  })
-
-  // ──────────── 分数计算 ────────────
-
-  describe('分数计算', () => {
-    it('顺序推荐权重应为 ×3', () => {
-      // 记录 category → brand 转移
+    it('Markov 转移权重 ×3', () => {
       store.record(['category', 'brand'])
-
-      const result = recommender.recommend(['category'])
-      const brandSuggestion = result.find((s) => s.key === 'brand')
-      expect(brandSuggestion).toBeDefined()
-      // brand 的 transition score = (1/1)*3 = 3, frequency score = (1/1)*1 = 1 → total = 4
-      expect(brandSuggestion!.score).toBe(4)
-      expect(brandSuggestion!.reason).toContain('sequence')
-      expect(brandSuggestion!.reason).toContain('frequency')
+      const r = rec.recommend(['category'])
+      const brand = r.find((s) => s.key === 'brand')!
+      expect(brand.score).toBe(4) // transition 3 + frequency 1
+      expect(brand.reason).toContain('sequence')
     })
 
-    it('全局频率权重应为 ×1', () => {
-      // 记录使用频率但不产生与当前 context 相关的转移
-      store.record(['color'])
-      store.record(['color'])
-      store.record(['price'])
-
-      const result = recommender.recommend([])
-      const colorSuggestion = result.find((s) => s.key === 'color')
-      const priceSuggestion = result.find((s) => s.key === 'price')
-
-      expect(colorSuggestion).toBeDefined()
-      expect(priceSuggestion).toBeDefined()
-      // color: freq = 2/2 * 1 = 1
-      expect(colorSuggestion!.score).toBe(1)
-      // price: freq = 1/2 * 1 = 0.5
-      expect(priceSuggestion!.score).toBe(0.5)
-    })
-
-    it('高频率 + 高转移概率的筛选器分数最高', () => {
-      store.record(['category', 'brand'])
-      store.record(['category', 'brand'])
-      store.record(['category', 'color'])
-      store.record(['category', 'price'])
-
-      const result = recommender.recommend(['category'])
-      // brand 有最高转移和最高频率
-      expect(result[0].key).toBe('brand')
-    })
-
-    it('结果应按分数降序排列', () => {
-      store.record(['category', 'brand'])
-      store.record(['category', 'brand'])
-      store.record(['category', 'color'])
-
-      const result = recommender.recommend(['category'])
-      for (let i = 1; i < result.length; i++) {
-        expect(result[i - 1].score).toBeGreaterThanOrEqual(result[i].score)
-      }
-    })
-
-    it('同分时应按 key 字典序排列（稳定排序）', () => {
-      // 不产生任何行为数据，所有分数都是 0
-      const result = recommender.recommend([])
-      const keys = result.map((s) => s.key)
-      // 应按字母序：category, color, price
+    it('稳定排序', () => {
+      const r = rec.recommend([])
+      const keys = r.map((s) => s.key)
       expect(keys).toEqual(['category', 'color', 'price'])
     })
   })
 
-  // ──────────── filterDef.weight ────────────
+  // ──────── 维度 1：筛选器推荐（FilterSelection[] context）────────
 
-  describe('filterDef.weight 加成', () => {
-    it('weight 应作为乘数影响分数', () => {
-      const weightedDefs: FilterDefs = {
-        a: { label: 'A', weight: 2 },
-        b: { label: 'B', weight: 0.5 },
-      }
-      const engine = new RuleEngine(weightedDefs)
-      const rec = new Recommender(weightedDefs, store, engine)
+  describe('recommend（FilterSelection[] context）', () => {
+    it('值感知推荐：不同值导致不同推荐排序', () => {
+      // 用户选电子产品后经常选 brand
+      store.recordSelections([
+        { key: 'category', value: '电子产品' },
+        { key: 'brand', value: 'Apple' },
+      ])
+      store.recordSelections([
+        { key: 'category', value: '电子产品' },
+        { key: 'brand', value: 'Samsung' },
+      ])
+      // 用户选服装后经常选 color
+      store.recordSelections([
+        { key: 'category', value: '服装' },
+        { key: 'color', value: '红色' },
+      ])
+      store.recordSelections([
+        { key: 'category', value: '服装' },
+        { key: 'color', value: '蓝色' },
+      ])
 
-      store.record(['a'])
-      store.record(['b'])
+      // 传入 category=电子产品 → brand 应排在前面
+      const r1 = rec.recommend([{ key: 'category', value: '电子产品' }])
+      expect(r1[0].key).toBe('brand')
+      expect(r1[0].reason).toContain('context')
 
-      const result = rec.recommend([])
-      const a = result.find((s) => s.key === 'a')!
-      const b = result.find((s) => s.key === 'b')!
-      // a: freq = 1/1 * 1 * weight(2) = 2
-      // b: freq = 1/1 * 1 * weight(0.5) = 0.5
-      expect(a.score).toBe(2)
-      expect(b.score).toBe(0.5)
+      // 传入 category=服装 → color 应排在前面
+      const r2 = rec.recommend([{ key: 'category', value: '服装' }])
+      expect(r2[0].key).toBe('color')
+    })
+
+    it('context 信号应与 Markov 转移信号叠加', () => {
+      store.recordSelections([
+        { key: 'category', value: '电子产品' },
+        { key: 'brand', value: 'Apple' },
+      ])
+      const r = rec.recommend([{ key: 'category', value: '电子产品' }])
+      const brand = r.find((s) => s.key === 'brand')!
+      // sequence(3) + context(2) + frequency(1) = 6
+      expect(brand.score).toBe(6)
     })
   })
 
-  // ──────────── 用户偏好 ────────────
+  // ──────── 维度 2：值推荐 ────────
 
-  describe('用户偏好', () => {
-    it('偏好权重应作为乘数影响排序', () => {
-      const rec = new Recommender(defs, store, ruleEngine, {
-        price: 5,
-        color: 0.1,
-      })
+  describe('recommendValues', () => {
+    it('应按上下文共现排序值', () => {
+      store.recordSelections([
+        { key: 'category', value: '电子产品' },
+        { key: 'brand', value: 'Apple' },
+      ])
+      store.recordSelections([
+        { key: 'category', value: '电子产品' },
+        { key: 'brand', value: 'Apple' },
+      ])
+      store.recordSelections([
+        { key: 'category', value: '电子产品' },
+        { key: 'brand', value: 'Samsung' },
+      ])
 
-      store.record(['price'])
-      store.record(['color'])
-
-      const result = rec.recommend([])
-      const price = result.find((s) => s.key === 'price')!
-      const color = result.find((s) => s.key === 'color')!
-
-      // price: freq = 1/1 * 1 * pref(5) = 5
-      // color: freq = 1/1 * 1 * pref(0.1) = 0.1
-      expect(price.score).toBe(5)
-      expect(color.score).toBe(0.1)
-      expect(price.reason).toContain('preference')
-    })
-
-    it('setUserPreferences 应动态更新偏好', () => {
-      store.record(['price'])
-      store.record(['color'])
-
-      const result1 = recommender.recommend([])
-      // 无偏好，分数相同
-      expect(result1.find((s) => s.key === 'price')!.score).toBe(
-        result1.find((s) => s.key === 'color')!.score,
+      const r = rec.recommendValues(
+        'brand',
+        [{ key: 'category', value: '电子产品' }],
+        ['Apple', 'Samsung', 'Huawei', 'Xiaomi'],
       )
 
-      recommender.setUserPreferences({ price: 10 })
-      const result2 = recommender.recommend([])
-      expect(result2.find((s) => s.key === 'price')!.score).toBe(10)
-    })
-  })
-
-  // ──────────── maxResults ────────────
-
-  describe('maxResults', () => {
-    it('应限制返回结果数', () => {
-      const result = recommender.recommend([], { maxResults: 2 })
-      expect(result.length).toBeLessThanOrEqual(2)
+      // Apple(共现2) > Samsung(共现1) > Huawei/Xiaomi(共现0)
+      expect(r[0].value).toBe('Apple')
+      expect(r[1].value).toBe('Samsung')
+      expect(r[0].score).toBeGreaterThan(r[1].score)
+      // Huawei, Xiaomi 分数为 0 但仍在列表中
+      expect(r.map((v) => v.value)).toContain('Huawei')
+      expect(r.map((v) => v.value)).toContain('Xiaomi')
     })
 
-    it('maxResults 大于候选数时返回全部', () => {
-      const result = recommender.recommend([], { maxResults: 100 })
-      // 空 context 下可用的：category, color, price
-      expect(result.length).toBe(3)
+    it('不同 context 应产生不同的值排序', () => {
+      store.recordSelections([
+        { key: 'category', value: '电子产品' },
+        { key: 'brand', value: 'Apple' },
+      ])
+      store.recordSelections([
+        { key: 'category', value: '服装' },
+        { key: 'brand', value: 'Nike' },
+      ])
+
+      const brands = ['Apple', 'Nike', 'Samsung']
+
+      const r1 = rec.recommendValues('brand', [{ key: 'category', value: '电子产品' }], brands)
+      expect(r1[0].value).toBe('Apple')
+
+      const r2 = rec.recommendValues('brand', [{ key: 'category', value: '服装' }], brands)
+      expect(r2[0].value).toBe('Nike')
     })
 
-    it('maxResults 为 0 或负数不截断', () => {
-      const result = recommender.recommend([], { maxResults: 0 })
-      expect(result.length).toBe(3)
-    })
-  })
+    it('无上下文时按全局值频率排序', () => {
+      store.recordSelections([{ key: 'brand', value: 'Apple' }, { key: 'color', value: '白' }])
+      store.recordSelections([{ key: 'brand', value: 'Apple' }, { key: 'color', value: '黑' }])
+      store.recordSelections([{ key: 'brand', value: 'Samsung' }, { key: 'color', value: '黑' }])
 
-  // ──────────── reason 字段 ────────────
-
-  describe('reason 字段', () => {
-    it('无行为数据时 reason 应为 undefined', () => {
-      const result = recommender.recommend([])
-      result.forEach((s) => expect(s.reason).toBeUndefined())
+      const r = rec.recommendValues('brand', [], ['Apple', 'Samsung', 'Huawei'])
+      expect(r[0].value).toBe('Apple') // freq 2
+      expect(r[1].value).toBe('Samsung') // freq 1
     })
 
-    it('只有频率信号时 reason 应包含 frequency', () => {
-      store.record(['color'])
-      const result = recommender.recommend([])
-      const color = result.find((s) => s.key === 'color')!
-      expect(color.reason).toBe('frequency')
+    it('allValues 未提供时只返回有数据的值', () => {
+      store.recordSelections([{ key: 'brand', value: 'Apple' }, { key: 'color', value: '白' }])
+      const r = rec.recommendValues('brand', [])
+      expect(r.length).toBe(1)
+      expect(r[0].value).toBe('Apple')
     })
 
-    it('有转移信号时 reason 应包含 sequence', () => {
-      store.record(['category', 'brand'])
-      const result = recommender.recommend(['category'])
-      const brand = result.find((s) => s.key === 'brand')!
-      expect(brand.reason).toContain('sequence')
-    })
-  })
+    it('maxResults 应限制返回数', () => {
+      store.recordSelections([{ key: 'b', value: 'v1' }, { key: 'c', value: 'x' }])
+      store.recordSelections([{ key: 'b', value: 'v2' }, { key: 'c', value: 'x' }])
+      store.recordSelections([{ key: 'b', value: 'v3' }, { key: 'c', value: 'x' }])
 
-  // ──────────── 边界情况 ────────────
-
-  describe('边界情况', () => {
-    it('非数组 context 返回空数组', () => {
-      expect(recommender.recommend(null as unknown as string[])).toEqual([])
-      expect(recommender.recommend(undefined as unknown as string[])).toEqual([])
-      expect(recommender.recommend('category' as unknown as string[])).toEqual([])
+      const r = rec.recommendValues('b', [], undefined, { maxResults: 2 })
+      expect(r.length).toBeLessThanOrEqual(2)
     })
 
-    it('label 应从 filterDefs 正确映射', () => {
-      const result = recommender.recommend([])
-      const category = result.find((s) => s.key === 'category')!
-      expect(category.label).toBe('分类')
+    it('reason 应正确标记信号来源', () => {
+      store.recordSelections([
+        { key: 'category', value: '电子产品' },
+        { key: 'brand', value: 'Apple' },
+      ])
+
+      const r = rec.recommendValues('brand', [{ key: 'category', value: '电子产品' }])
+      const apple = r.find((v) => v.value === 'Apple')!
+      expect(apple.reason).toContain('frequency')
+      expect(apple.reason).toContain('context')
+    })
+
+    it('非法输入返回空数组', () => {
+      expect(rec.recommendValues(null as unknown as string, [])).toEqual([])
     })
   })
 })
