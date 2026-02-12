@@ -8,7 +8,7 @@
  * - 与 Formily field.setDataSource 集成
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Schema, type ISchema } from '@formily/json-schema';
 import { useDebounceFn } from 'ahooks';
@@ -16,6 +16,7 @@ import { cloneDeep, uniqBy } from 'es-toolkit';
 
 import { useOptionsContext } from '../../context';
 import { useField } from '../useField';
+import { useFilter } from '../useFilter';
 import type {
   UseOptionsConfig,
   UseOptionsResult,
@@ -124,6 +125,7 @@ export function useOptions(params: UseOptionsConfig): UseOptionsResult {
 
   // ==================== 1. 基础状态与上下文 ====================
 
+  const filter = useFilter();
   const enhancedField = useField();
   const optionsContext = useOptionsContext();
   const [searchTerm, setSearchTerm] = useState<string>();
@@ -350,7 +352,31 @@ export function useOptions(params: UseOptionsConfig): UseOptionsResult {
     wait: dataSource?.searchDebounce ?? 300,
   });
 
-  // ==================== 11. 返回结果 ====================
+  // ==================== 11. Options hooks 集成 ====================
+
+  const prevLoadingRef = useRef(false);
+
+  useEffect(() => {
+    const isLoading = queryResult.isFetching;
+    if (isLoading && !prevLoadingRef.current) {
+      filter.hooks.optionsLoad.call({ fieldPath: effectiveFieldPath });
+    }
+    prevLoadingRef.current = isLoading;
+  }, [queryResult.isFetching, filter, effectiveFieldPath]);
+
+  useEffect(() => {
+    if (mergeData && mergeData.length > 0) {
+      filter.hooks.optionsLoaded.call({ fieldPath: effectiveFieldPath, data: mergeData });
+    }
+  }, [mergeData, filter, effectiveFieldPath]);
+
+  useEffect(() => {
+    if (queryResult.error) {
+      filter.hooks.optionsError.call({ fieldPath: effectiveFieldPath, error: queryResult.error });
+    }
+  }, [queryResult.error, filter, effectiveFieldPath]);
+
+  // ==================== 12. 返回结果 ====================
 
   return {
     ...queryResult,

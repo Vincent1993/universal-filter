@@ -160,16 +160,23 @@ describe('FilterController - 业务场景测试', () => {
     it('多个插件的 hooks 应该按注册顺序执行', async () => {
       const callOrder: string[] = [];
 
+      // 插件通过 onInit 中的 filter.hooks.xxx.tap() 注册生命周期
       const pluginA: PluginFactory<Draft> = () => ({
         name: 'PluginA',
-        onApplyStart: () => { callOrder.push('A:start'); },
-        onApplySuccess: () => { callOrder.push('A:success'); }
+        onInit({ filter, pluginManager }) {
+          filter.hooks.applyStart.tap('PluginA:start', () => { callOrder.push('A:start'); });
+          filter.hooks.applySuccess.tap('PluginA:success', () => { callOrder.push('A:success'); });
+          pluginManager.markReady('PluginA', true);
+        }
       });
 
       const pluginB: PluginFactory<Draft> = () => ({
         name: 'PluginB',
-        onApplyStart: () => { callOrder.push('B:start'); },
-        onApplySuccess: () => { callOrder.push('B:success'); }
+        onInit({ filter, pluginManager }) {
+          filter.hooks.applyStart.tap('PluginB:start', () => { callOrder.push('B:start'); });
+          filter.hooks.applySuccess.tap('PluginB:success', () => { callOrder.push('B:success'); });
+          pluginManager.markReady('PluginB', true);
+        }
       });
 
       const filter = createFilter({
@@ -190,26 +197,33 @@ describe('FilterController - 业务场景测试', () => {
       ]);
     });
 
-    it('插件应该能够通过 API 阻止流程或抛出错误', async () => {
-        // Formily 的 submit 流程中，验证失败会阻止提交
-        // 但插件的 onApplyStart 只是监听，无法直接阻止 submit
-        // 除非抛出异常，这会导致 apply promise reject
+    it('插件应该能够通过 beforeApply BailHook 阻止流程', async () => {
+        const applySpy = vi.fn();
 
-        const errorPlugin: PluginFactory<Draft> = () => ({
-            name: 'ErrorPlugin',
-            onApplyStart: () => {
-                throw new Error('Blocked by plugin');
+        const guardPlugin: PluginFactory<Draft> = () => ({
+            name: 'GuardPlugin',
+            onInit({ filter, pluginManager }) {
+              // 使用 beforeApply BailHook 拦截 apply
+              filter.hooks.beforeApply.tap('GuardPlugin', () => {
+                return true; // 返回 true 阻止 apply
+              });
+              filter.hooks.applySuccess.tap('GuardPlugin:success', applySpy);
+              pluginManager.markReady('GuardPlugin', true);
             }
         });
 
         const filter = createFilter({
-            plugins: [errorPlugin]
+            plugins: [guardPlugin]
         });
 
         await waitForPluginsReady(filter);
         triggerFormMount(filter);
 
-        await expect(filter.apply()).rejects.toThrow('Blocked by plugin');
+        // apply 应该被 beforeApply BailHook 拦截，不会 reject，而是直接返回
+        await filter.apply();
+
+        // applySuccess 不应该被触发
+        expect(applySpy).not.toHaveBeenCalled();
     });
   });
 

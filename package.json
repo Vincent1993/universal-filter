@@ -32,24 +32,26 @@
     "react-dom": "18.2.0"
   },
   "dependencies": {
-    "ahooks": "^3.9.6",
     "@formily/core": "^2.3.7",
     "@formily/json-schema": "^2.3.7",
     "@formily/react": "^2.3.7",
     "@formily/reactive": "^2.3.7",
     "@formily/reactive-react": "^2.3.7",
     "@formily/shared": "^2.3.7",
+    "ahooks": "^3.9.6",
     "es-toolkit": "^1.40.0",
-    "eventemitter3": "^5.0.1",
-    "query-string": "^9.3.1"
+    "query-string": "^9.3.1",
+    "tapable": "^2.3.0"
   },
   "devDependencies": {
     "@rslib/core": "^0.15.1",
+    "@tanstack/react-query": "5.90.10",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "@testing-library/react-hooks": "^8.0.1",
     "@types/react": "18.2.0",
     "@types/react-dom": "18.2.0",
+    "@types/tapable": "^2.3.0",
     "@typescript-eslint/eslint-plugin": "^8.46.2",
     "@typescript-eslint/parser": "^8.46.2",
     "@vitest/coverage-v8": "^3.2.4",

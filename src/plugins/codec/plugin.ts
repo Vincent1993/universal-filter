@@ -12,59 +12,53 @@ import { CodecRuntime } from './runtime';
 export const CODEC_PLUGIN_NAME = 'codec-plugin';
 
 /**
- * 创建 codec 转换插件
+ * 创建 Codec 转换插件
  *
- * 该插件用于在 Filter 的数据流入流出时进行数据格式转换，
- * 主要用于前后端数据模型的适配。
+ * 在 Filter 的数据流入/流出时执行数据格式转换，典型场景：
+ * - 前后端字段命名风格转换（camelCase ↔ snake_case）
+ * - 数据结构扁平化/嵌套化
+ * - 枚举值映射
+ * - 异步数据补全（如 ID → Name 查询）
+ *
+ * ## 数据流方向
+ *
+ * | 方向 | 使用函数 | 触发时机 | 说明 |
+ * |------|---------|---------|------|
+ * | Inbound（入站） | `transform` | 初始化时 | 外部数据 → 表单内部格式 |
+ * | Outbound（出站） | `reverseTransform` | apply 时 | 表单内部格式 → 外部数据 |
+ *
+ * ## 出站转换原理
+ *
+ * 使用 tapable 的 `AsyncSeriesWaterfallHook`（`filter.hooks.processSnapshot`）
+ * 注册出站转换。apply 成功后，snapshot 依次经过所有转换器的 `reverseTransform`，
+ * 最终结果存入 `filter.applied`。`filter.draft` 始终保持内部格式不变。
+ *
+ * @param options - 插件配置
+ * @returns Plugin 对象
  *
  * @example
  * ```ts
- * // 基础同步转换
- * const plugin = createCodecTransformPlugin({
- *   transformers: [
- *     {
- *       name: 'snake_case',
- *       transform: (data) => convertKeys(data, 'snake_case'),
- *       reverseTransform: (data) => convertKeys(data, 'camelCase'),
- *     },
+ * // camelCase ↔ snake_case 双向转换
+ * createFilter({
+ *   defaultValues: { userName: 'John', userAge: 30 },
+ *   plugins: [
+ *     createCodecTransformPlugin({
+ *       transformers: [{
+ *         name: 'snake_case',
+ *         // inbound: snake_case → camelCase（外部数据加载时）
+ *         transform: (data) => mapKeys(data, camelCase),
+ *         // outbound: camelCase → snake_case（apply 提交时）
+ *         reverseTransform: (data) => mapKeys(data, snakeCase),
+ *       }],
+ *       applyOn: 'both',
+ *     }),
  *   ],
- *   applyOn: 'both',
  * });
  *
- * // 异步转换示例（带加载状态）
- * const asyncPlugin = createCodecTransformPlugin({
- *   transformers: [
- *     {
- *       name: 'async-fetch',
- *       transform: async (data) => {
- *         const extraData = await fetchExtraData(data.id);
- *         return { ...data, ...extraData };
- *       },
- *     },
- *   ],
- *   applyOn: 'init',
- *   onError: 'skip',
- *   enableTransformState: true,
- * });
- *
- * // 在组件中使用响应式状态（用于 UI 加载提示）
- * import { observer } from '@formily/reactive-react';
- *
- * const MyComponent = observer(() => {
- *   const codecInfo = filter.plugin.get('codec-plugin');
- *   const transformState = codecInfo?.state.transformState as TransformState;
- *   if (transformState?.isTransforming) {
- *     return <Loading message={`正在转换 ${transformState.currentTransformer || '数据'}`} />;
- *   }
- *   return <Form />;
- * });
- *
- * // 手动调用转换函数
- * const codecInfo = filter.plugin.get('codec-plugin');
- * if (codecInfo) {
- *   const { transformInbound, transformOutbound } = codecInfo.state as CodecPluginApi;
- *   const encoded = await transformOutbound(myData);
- * }
+ * // apply 后：
+ * // filter.draft      → { userName: 'John', userAge: 30 }   (内部格式)
+ * // filter.applied     → { user_name: 'John', user_age: 30 } (外部格式)
+ * // filter.lastApplied → { userName: 'John', userAge: 30 }   (未转换)
  * ```
  */
 export function createCodecTransformPlugin<TDraft extends Draft = Draft>(
@@ -95,9 +89,6 @@ export function createCodecTransformPlugin<TDraft extends Draft = Draft>(
       console.log(`[CodecTransformPlugin] ${message}`, ...args);
     }
   };
-
-  // 存储清理函数
-  let unregisterPostApply: (() => void) | undefined;
 
   return {
     name: CODEC_PLUGIN_NAME,
@@ -132,11 +123,12 @@ export function createCodecTransformPlugin<TDraft extends Draft = Draft>(
         }
 
         // 如果需要应用时转换，注册 hook
+        // 使用 tapable 的 AsyncSeriesWaterfallHook（filter.hooks.processSnapshot）
         if (
           (applyOn === 'apply' || applyOn === 'both') &&
           runtime.hasTransformers()
         ) {
-          unregisterPostApply = filter.hooks.processSnapshot.tapPromise(
+          filter.hooks.processSnapshot.tapPromise(
             `${CODEC_PLUGIN_NAME}-outbound`,
             async (applied, _draft) => {
               log('执行出站转换');
@@ -167,11 +159,8 @@ export function createCodecTransformPlugin<TDraft extends Draft = Draft>(
     },
 
     onDestroy() {
-      // 清理 post-apply 转换器
-      if (unregisterPostApply) {
-        unregisterPostApply();
-        unregisterPostApply = undefined;
-      }
+      // tapable hooks 不需要手动取消注册
+      // 当 filter 被销毁时，hooks 实例会随之释放
     },
   };
 }

@@ -3,14 +3,14 @@
  * 测试插件管理器的所有功能：注册、初始化、生命周期管理和状态维护
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import EventEmitter from 'eventemitter3';
 import { PluginManager } from '../../src/core/managers/PluginManager';
+import { createFilterHooks } from '../../src/core/hooks';
+import type { FilterHooks } from '../../src/core/hooks';
 import type {
   Draft,
   Plugin,
   FilterApi,
   PluginFactory,
-  FilterEventMap,
 } from '../../src/core/types';
 import { createFilter } from '../../src/core/createFilter';
 
@@ -20,12 +20,12 @@ interface TestDraft extends Draft {
 }
 
 describe('PluginManager - 完整功能测试', () => {
-  let bus: EventEmitter<FilterEventMap<TestDraft>>;
+  let hooks: FilterHooks<TestDraft>;
   let filterApi: FilterApi<TestDraft>;
   let manager: PluginManager<TestDraft>;
 
   beforeEach(() => {
-    bus = new EventEmitter<FilterEventMap<TestDraft>>();
+    hooks = createFilterHooks<TestDraft>();
     filterApi = createFilter<TestDraft>({
       defaultValues: { name: 'John', age: 30 },
     });
@@ -35,7 +35,6 @@ describe('PluginManager - 完整功能测试', () => {
     if (manager) {
       manager.dispose();
     }
-    bus.removeAllListeners();
   });
 
   describe('构造函数和初始化', () => {
@@ -45,7 +44,7 @@ describe('PluginManager - 完整功能测试', () => {
       };
 
       manager = new PluginManager(
-        bus,
+        hooks,
         [plugin],
         [],
         'append',
@@ -66,7 +65,7 @@ describe('PluginManager - 完整功能测试', () => {
         { name: 'plugin-3' },
       ];
 
-      manager = new PluginManager(bus, plugins, [], 'append', filterApi);
+      manager = new PluginManager(hooks, plugins, [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(manager.isReady('plugin-1')).toBe(true);
@@ -82,9 +81,10 @@ describe('PluginManager - 完整功能测试', () => {
         { name: 'plugin-2' },
       ];
 
-      bus.on('plugins:attached', attachedSpy);
+      // 使用 tapable hooks 监听
+      hooks.pluginsAttached.tap('test', attachedSpy);
 
-      manager = new PluginManager(bus, plugins, [], 'append', filterApi);
+      manager = new PluginManager(hooks, plugins, [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(attachedSpy).toHaveBeenCalledWith({ total: 2 });
@@ -115,7 +115,7 @@ describe('PluginManager - 完整功能测试', () => {
       const instancePlugin: PluginFactory<TestDraft> = () => ({ name: 'instance' });
 
       const testManager = new TestablePluginManager(
-        bus,
+        hooks,
         [instancePlugin],
         [globalPlugin],
         'prepend',
@@ -138,7 +138,7 @@ describe('PluginManager - 完整功能测试', () => {
       const instancePlugin: PluginFactory<TestDraft> = () => ({ name: 'instance' });
 
       const testManager = new TestablePluginManager(
-        bus,
+        hooks,
         [instancePlugin],
         [globalPlugin],
         'append',
@@ -167,7 +167,7 @@ describe('PluginManager - 完整功能测试', () => {
       ];
 
       const testManager = new TestablePluginManager(
-        bus,
+        hooks,
         instancePlugins,
         globalPlugins,
         'prepend',
@@ -226,7 +226,7 @@ describe('PluginManager - 完整功能测试', () => {
 
       // 测试 prepend 策略的实际执行顺序
       manager = new PluginManager(
-        bus,
+        hooks,
         [instancePlugin],
         [globalPlugin],
         'prepend',
@@ -239,8 +239,9 @@ describe('PluginManager - 完整功能测试', () => {
       manager.dispose();
       executionOrder.length = 0;
 
+      const hooks2 = createFilterHooks<TestDraft>();
       manager = new PluginManager(
-        bus,
+        hooks2,
         [instancePlugin],
         [globalPlugin],
         'append',
@@ -257,7 +258,7 @@ describe('PluginManager - 完整功能测试', () => {
         name: 'direct-plugin',
       };
 
-      manager = new PluginManager(bus, [plugin], [], 'append', filterApi);
+      manager = new PluginManager(hooks, [plugin], [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(manager.isReady('direct-plugin')).toBe(true);
@@ -268,7 +269,7 @@ describe('PluginManager - 完整功能测试', () => {
         name: 'factory-plugin',
       });
 
-      manager = new PluginManager(bus, [factory], [], 'append', filterApi);
+      manager = new PluginManager(hooks, [factory], [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(manager.isReady('factory-plugin')).toBe(true);
@@ -277,7 +278,7 @@ describe('PluginManager - 完整功能测试', () => {
     it('应该支持工厂函数返回 undefined（跳过插件）', async () => {
       const factory: PluginFactory<TestDraft> = () => undefined;
 
-      manager = new PluginManager(bus, [factory], [], 'append', filterApi);
+      manager = new PluginManager(hooks, [factory], [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(manager.ready).toBe(true);
@@ -289,7 +290,7 @@ describe('PluginManager - 完整功能测试', () => {
         return { name: 'factory-plugin' };
       };
 
-      manager = new PluginManager(bus, [factory], [], 'append', filterApi);
+      manager = new PluginManager(hooks, [factory], [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(manager.isReady('factory-plugin')).toBe(true);
@@ -313,7 +314,7 @@ describe('PluginManager - 完整功能测试', () => {
         };
       };
 
-      manager = new PluginManager(bus, [factory], [], 'append', filterApi);
+      manager = new PluginManager(hooks, [factory], [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(initOrder).toEqual(['shifted', 'factory']);
@@ -328,7 +329,7 @@ describe('PluginManager - 完整功能测试', () => {
       const toRemove: Plugin<TestDraft> = { name: 'to-remove' };
 
       manager = new PluginManager(
-        bus,
+        hooks,
         [toRemove, factory],
         [],
         'append',
@@ -348,7 +349,7 @@ describe('PluginManager - 完整功能测试', () => {
         name: 'no-init-plugin',
       };
 
-      manager = new PluginManager(bus, [plugin], [], 'append', filterApi);
+      manager = new PluginManager(hooks, [plugin], [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(manager.isReady('no-init-plugin')).toBe(true);
@@ -363,7 +364,7 @@ describe('PluginManager - 完整功能测试', () => {
         },
       };
 
-      manager = new PluginManager(bus, [plugin], [], 'append', filterApi);
+      manager = new PluginManager(hooks, [plugin], [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(onInitSpy).toHaveBeenCalledTimes(1);
@@ -378,7 +379,7 @@ describe('PluginManager - 完整功能测试', () => {
         },
       };
 
-      manager = new PluginManager(bus, [plugin], [], 'append', filterApi);
+      manager = new PluginManager(hooks, [plugin], [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(receivedContext).toBeDefined();
@@ -388,7 +389,7 @@ describe('PluginManager - 完整功能测试', () => {
 
     it('插件应该自己调用 markReady 标记就绪状态', async () => {
       const readySpy = vi.fn();
-      bus.on('plugin:ready', readySpy);
+      hooks.pluginReady.tap('test', readySpy);
 
       const plugin: Plugin<TestDraft> = {
         name: 'self-ready-plugin',
@@ -399,7 +400,7 @@ describe('PluginManager - 完整功能测试', () => {
         },
       };
 
-      manager = new PluginManager(bus, [plugin], [], 'append', filterApi);
+      manager = new PluginManager(hooks, [plugin], [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 20));
 
       expect(readySpy).toHaveBeenCalledWith({
@@ -419,7 +420,7 @@ describe('PluginManager - 完整功能测试', () => {
         },
       };
 
-      manager = new PluginManager(bus, [plugin], [], 'append', filterApi);
+      manager = new PluginManager(hooks, [plugin], [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(manager.isReady('error-plugin')).toBe(false);
@@ -428,7 +429,7 @@ describe('PluginManager - 完整功能测试', () => {
 
     it('onInit 抛出异常时应该触发 plugin:ready 事件', async () => {
       const readySpy = vi.fn();
-      bus.on('plugin:ready', readySpy);
+      hooks.pluginReady.tap('test', readySpy);
 
       const error = new Error('Init failed');
       const plugin: Plugin<TestDraft> = {
@@ -438,7 +439,7 @@ describe('PluginManager - 完整功能测试', () => {
         },
       };
 
-      manager = new PluginManager(bus, [plugin], [], 'append', filterApi);
+      manager = new PluginManager(hooks, [plugin], [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(readySpy).toHaveBeenCalledWith({
@@ -454,7 +455,7 @@ describe('PluginManager - 完整功能测试', () => {
       const plugin: Plugin<TestDraft> = {
         name: 'test-plugin',
       };
-      manager = new PluginManager(bus, [plugin], [], 'append', filterApi);
+      manager = new PluginManager(hooks, [plugin], [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
@@ -465,7 +466,7 @@ describe('PluginManager - 完整功能测试', () => {
 
     it('应该触发 plugin:ready 事件', () => {
       const readySpy = vi.fn();
-      bus.on('plugin:ready', readySpy);
+      hooks.pluginReady.tap('test', readySpy);
 
       manager.markReady('test-plugin', true);
 
@@ -485,7 +486,7 @@ describe('PluginManager - 完整功能测试', () => {
 
     it('应该触发带错误信息的 plugin:ready 事件', () => {
       const readySpy = vi.fn();
-      bus.on('plugin:ready', readySpy);
+      hooks.pluginReady.tap('test', readySpy);
 
       const error = new Error('Test error');
       manager.markReady('test-plugin', false, error);
@@ -504,7 +505,7 @@ describe('PluginManager - 完整功能测试', () => {
         { name: 'plugin-1' },
         { name: 'plugin-2' },
       ];
-      manager = new PluginManager(bus, plugins, [], 'append', filterApi);
+      manager = new PluginManager(hooks, plugins, [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
@@ -534,7 +535,7 @@ describe('PluginManager - 完整功能测试', () => {
         { name: 'plugin-3' },
       ];
 
-      manager = new PluginManager(bus, plugins, [], 'append', filterApi);
+      manager = new PluginManager(hooks, plugins, [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(manager.ready).toBe(true);
@@ -552,7 +553,7 @@ describe('PluginManager - 完整功能测试', () => {
         },
       ];
 
-      manager = new PluginManager(bus, plugins, [], 'append', filterApi);
+      manager = new PluginManager(hooks, plugins, [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(manager.ready).toBe(false);
@@ -560,14 +561,14 @@ describe('PluginManager - 完整功能测试', () => {
 
     it('应该触发 plugins:ready 事件', async () => {
       const readySpy = vi.fn();
-      bus.on('plugins:ready', readySpy);
+      hooks.pluginsReady.tap('test', readySpy);
 
       const plugins: Plugin<TestDraft>[] = [
         { name: 'plugin-1' },
         { name: 'plugin-2' },
       ];
 
-      manager = new PluginManager(bus, plugins, [], 'append', filterApi);
+      manager = new PluginManager(hooks, plugins, [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(readySpy).toHaveBeenCalledWith({ ready: true });
@@ -578,7 +579,7 @@ describe('PluginManager - 完整功能测试', () => {
         name: 'dynamic-plugin',
       };
 
-      manager = new PluginManager(bus, [plugin], [], 'append', filterApi);
+      manager = new PluginManager(hooks, [plugin], [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(manager.ready).toBe(true);
@@ -596,7 +597,7 @@ describe('PluginManager - 完整功能测试', () => {
       const plugin: Plugin<TestDraft> = {
         name: 'state-plugin',
       };
-      manager = new PluginManager(bus, [plugin], [], 'append', filterApi);
+      manager = new PluginManager(hooks, [plugin], [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
@@ -655,7 +656,7 @@ describe('PluginManager - 完整功能测试', () => {
         { name: 'plugin-2', onDestroy: destroySpy2 },
       ];
 
-      manager = new PluginManager(bus, plugins, [], 'append', filterApi);
+      manager = new PluginManager(hooks, plugins, [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       const result = manager.dispose();
@@ -680,7 +681,7 @@ describe('PluginManager - 完整功能测试', () => {
         },
       ];
 
-      manager = new PluginManager(bus, plugins, [], 'append', filterApi);
+      manager = new PluginManager(hooks, plugins, [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       const result = manager.dispose();
@@ -694,14 +695,14 @@ describe('PluginManager - 完整功能测试', () => {
 
     it('应该触发 plugins:destroyed 事件', async () => {
       const destroyedSpy = vi.fn();
-      bus.on('plugins:destroyed', destroyedSpy);
+      hooks.pluginsDestroyed.tap('test', destroyedSpy);
 
       const plugins: Plugin<TestDraft>[] = [
         { name: 'plugin-1' },
         { name: 'plugin-2' },
       ];
 
-      manager = new PluginManager(bus, plugins, [], 'append', filterApi);
+      manager = new PluginManager(hooks, plugins, [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       manager.dispose();
@@ -714,7 +715,7 @@ describe('PluginManager - 完整功能测试', () => {
         name: 'cleanup-plugin',
       };
 
-      manager = new PluginManager(bus, [plugin], [], 'append', filterApi);
+      manager = new PluginManager(hooks, [plugin], [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       manager.setState('cleanup-plugin', { test: 1 });
@@ -750,7 +751,7 @@ describe('PluginManager - 完整功能测试', () => {
         },
       ];
 
-      manager = new PluginManager(bus, plugins, [], 'append', filterApi);
+      manager = new PluginManager(hooks, plugins, [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 30));
 
       expect(initOrder).toEqual(['async-1', 'async-2']);
@@ -782,7 +783,7 @@ describe('PluginManager - 完整功能测试', () => {
       };
 
       // plugin-2 应该在 plugin1 之前初始化（因为它在数组中排在前面）
-      manager = new PluginManager(bus, [plugin2, plugin1], [], 'append', filterApi);
+      manager = new PluginManager(hooks, [plugin2, plugin1], [], 'append', filterApi);
 
       // 等待足够的时间让两个插件都完成初始化
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -798,7 +799,7 @@ describe('PluginManager - 完整功能测试', () => {
         name: `plugin-${i}`,
       }));
 
-      manager = new PluginManager(bus, plugins, [], 'append', filterApi);
+      manager = new PluginManager(hooks, plugins, [], 'append', filterApi);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(manager.ready).toBe(true);
@@ -808,4 +809,3 @@ describe('PluginManager - 完整功能测试', () => {
     });
   });
 });
-
