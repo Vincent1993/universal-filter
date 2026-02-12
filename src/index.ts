@@ -21,3 +21,4 @@ export { withOptions } from './components/withOptions';
 export * from './plugins/urlSyncPlugin';
 export * from './plugins/codec';
 export * from './plugins/monitorPlugin';
+export * from './plugins/copilot';
